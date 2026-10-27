@@ -1,6 +1,6 @@
 ---
 name: meeting-scheduler
-description: Schedule a meeting through the outlook MCP server - fuzzy-find people and rooms in the enterprise directory, check everyone's free/busy, and save an unsent meeting draft for the user to review and send, carrying across an agenda already written in the conversation. Use when the user wants to find a time with someone, book a meeting or a room, asks "when are Josh and I both free", "set up 30 minutes with the team next week", "find a suitable time with Josh Smith in Room R5-3-84", says "now find a time to discuss this" after drafting an agenda or a document, or asks for a meeting invite to be drafted.
+description: Schedule a meeting through the outlook MCP server - fuzzy-find people and rooms in the enterprise directory, check everyone's free/busy, and save an unsent meeting draft for the user to review and send, carrying across an agenda already written in the conversation. Use when the user wants to find a time with someone, book a meeting or a room, asks "when are Josh and I both free", "set up 30 minutes with the team next week", "find a suitable time with Josh Smith in Room R5-3-84", says "now find a time to discuss this" after drafting an agenda or a document, or asks for a meeting invite to be drafted. Not for the user's own appointments with nobody else invited ("add these to my calendar") - those go straight in with outlook_add_appointments, covered by the outlook skill.
 ---
 
 # Scheduling a meeting (via the `outlook` MCP server)
@@ -10,6 +10,12 @@ Outlook running and logged into an Exchange profile). If the three tools
 below are missing, tell the user to wire it in and verify with
 `python outlook.py --check`, which reports whether the directory and
 free/busy are readable on that endpoint.
+
+**Nobody else in it? Not this skill.** A list of the user's own
+appointments to put in the diary ("add these to my calendar", "book me in
+for the dentist") has no one to find, no free/busy to check and nothing to
+send: use `outlook_add_appointments` (see the `outlook` skill), which saves
+them straight in. This skill is for meetings with other people or a room.
 
 ## The whole job in four steps
 

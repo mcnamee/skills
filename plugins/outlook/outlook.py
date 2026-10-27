@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 r"""
-outlook.py (v11.7.2)
+outlook.py (v11.8.0)
 ======================
 
 A single-file MCP (Model Context Protocol) server giving an LLM near-read-only
@@ -12,16 +12,18 @@ own compose window.
 
 NOTHING HERE CAN SEND. Not an email, not a reply, not a meeting invitation.
 Nor can it accept, move or delete anything in the mailbox. There are exactly
-TWO writes to the mailbox, both drafts the user sends themselves:
+TWO writes to the mailbox by default, both drafts the user sends themselves:
 outlook_draft_meeting saves a meeting into the Calendar with its invitations
 unsent (the state Outlook labels "invitations have not been sent for this
 meeting"), and outlook_draft_email (v11.1.0) opens an email, reply or forward
 in Outlook's compose window with the agreed text in it and saves it to Drafts.
-Set OUTLOOK_ALLOW_DRAFTS=false and both are gone, at which point the mailbox is
-strictly read-only again. The other two things it
-writes are local files and only on request: an email kept as Markdown for the
-knowledge base, a printable PDF day planner, and a printable PDF of the
-team's open tasks.
+Set OUTLOOK_ALLOW_DRAFTS=false and both are gone. A THIRD write is off unless
+OUTLOOK_ALLOW_WRITE=true: outlook_add_appointments (v11.8.0) saves the user's
+OWN appointments - nobody invited, so there is nothing to send - straight
+into the Calendar. With drafts off and that left off, the mailbox is strictly
+read-only. The other things it writes are local files and only on request:
+an email kept as Markdown for the knowledge base, a printable PDF day planner,
+and a printable PDF of the team's open tasks.
 
 Designed for an offline Windows endpoint where Outlook is installed, running,
 and logged into an on-premises Exchange profile. All mail and calendar access
@@ -44,8 +46,9 @@ REQUIREMENTS
 - Classic Win32 Outlook (NOT "New Outlook", which has no COM support).
 - Outlook installed, running, and logged into a profile.
 
-TOOLS EXPOSED (read-only on the mailbox, apart from the two draft tools)
----------------------------------------------------
+TOOLS EXPOSED (read-only on the mailbox, apart from the draft tools and
+outlook_add_appointments)
+------------------------------------------------------------------------
 - outlook_list_recent_emails : recent Inbox messages
 - outlook_search_emails      : search Inbox by subject / sender
 - outlook_get_email          : full body of one message by EntryID
@@ -83,6 +86,12 @@ TOOL FOR DRAFTING AN EMAIL  (new in v11.1.0 - see EMAIL DRAFTS below)
 ---------------------------------------------------------------------
 - outlook_draft_email           : open an UNSENT email / reply / forward in
                                   Outlook's compose window, saved to Drafts
+
+TOOL FOR YOUR OWN APPOINTMENTS  (new in v11.8.0 - see OWN APPOINTMENTS below)
+-----------------------------------------------------------------------------
+- outlook_add_appointments      : save a list of the user's own appointments
+                                  (nobody invited) straight into the calendar.
+                                  Only offered with OUTLOOK_ALLOW_WRITE=true.
 
 Markdown export for a RAG knowledge base (ON REQUEST)
 -----------------------------------------------------
@@ -250,6 +259,37 @@ window popping open on every round of a draft is noise.
   for a meeting. The content blacklist applies on the way in (subject, body,
   recipients), and a message the blacklist withholds cannot be replied to or
   forwarded from here.
+
+OWN APPOINTMENTS
+----------------
+"Here is a list of meetings, add them to my calendar." outlook_add_appointments
+takes the whole list in one call and saves each as an APPOINTMENT -
+MeetingStatus olNonMeeting, no recipients - straight into the user's own
+Calendar. Not a draft, not opened on screen. It takes no attendees, and an
+item that arrives with any is refused: a meeting with anyone else in it is
+outlook_draft_meeting's job, and stays an unsent draft.
+
+- OFF BY DEFAULT. It is the one write here that lands without the user
+  pressing anything, so it follows the suite's rule for writes: offered only
+  when OUTLOOK_ALLOW_WRITE=true, and not in tools/list at all otherwise, so an
+  update never hands an existing install new power. Independent of
+  OUTLOOK_ALLOW_DRAFTS.
+- ALL OR NOTHING ON THE CHECKS. Every item is validated before any is saved
+  (strict 'YYYY-MM-DD HH:MM' start; 'end' as a full time or a bare 'HH:MM' on
+  the start's day, or duration_minutes, default 30; the content blacklist on
+  subject, location, body and categories). One bad item means nothing is
+  saved, so a list is never half booked by a typo.
+- THE TIME IS VERIFIED exactly as for a meeting draft: the start is written
+  in whichever _COM_DATE_FORMS form round-trips and read back before Save().
+  If Outlook will not hold the time, that appointment is not saved.
+- NO DOUBLES. One calendar read over the list's dates finds what is already
+  there; an item with the same subject (case and spacing ignored) at the same
+  start is skipped and reported, as is an item listed twice. So resending a
+  list - a retry, or "did that work?" - books each one once. If the calendar
+  cannot be read for that check, the appointments are still added and the
+  reply says duplicates were not checked.
+- Up to APPOINTMENTS_MAX_PER_CALL (50) per call. Reminder 15 minutes and
+  "busy" by default, as for a meeting draft. No all-day events.
 
 RECURRING SERIES  (why a meeting can be in Outlook but not in the results)
 --------------------------------------------------------------------------
@@ -758,10 +798,13 @@ Server-specific settings, all optional and all environment variables:
                                 20000). Raise it on a very large GAL if people
                                 go missing; a search that stops early says so.
     OUTLOOK_ALLOW_DRAFTS=false  remove outlook_draft_meeting and
-                                outlook_draft_email altogether. The server is
-                                then read-only on the mailbox again and neither
-                                tool is offered at all, so nothing can promise
-                                the user a draft.
+                                outlook_draft_email altogether. Neither tool is
+                                offered at all, so nothing can promise the
+                                user a draft.
+    OUTLOOK_ALLOW_WRITE=true    offer outlook_add_appointments, which saves
+                                the user's own appointments (nobody invited)
+                                straight into the calendar. Blank or unset
+                                means it is not offered.
 
 There are NO configuration command-line flags: everything above is an
 environment variable, so two settings can never disagree. The only flags this
@@ -818,7 +861,7 @@ IMPORTANT (stdio-on-Windows pitfalls)
 
 # Semantic version of this server. Bump on EVERY change (see CLAUDE.md):
 # MAJOR = breaking config/tool change, MINOR = new feature, PATCH = fix.
-__version__ = "11.7.2"
+__version__ = "11.8.0"
 
 import os
 import re
@@ -1023,13 +1066,20 @@ MEETING_END_HOUR = 17
 # says so in its reply. Override with OUTLOOK_GAL_SCAN_CAP.
 GAL_SCAN_CAP = 20000
 
-# Whether outlook_draft_meeting and outlook_draft_email exist at all. They are
-# the only tools in this server that write to the MAILBOX - an unsent meeting
-# saved into the Calendar, and an unsent email opened in Outlook and saved to
-# Drafts - which the user then reviews and sends themselves. Set it False (or
-# OUTLOOK_ALLOW_DRAFTS=false) and neither is offered, leaving the server
+# Whether outlook_draft_meeting and outlook_draft_email exist at all. They
+# write to the MAILBOX - an unsent meeting saved into the Calendar, and an
+# unsent email opened in Outlook and saved to Drafts - which the user then
+# reviews and sends themselves. Set it False (or OUTLOOK_ALLOW_DRAFTS=false)
+# and neither is offered; with ALLOW_WRITE below also off, the server is
 # read-only on the mailbox. Nothing here can ever SEND.
 ALLOW_DRAFTS = True
+
+# Whether outlook_add_appointments exists at all (v11.8.0). It saves the
+# user's OWN appointments - nobody invited - straight into their calendar,
+# with no draft in between, so unlike the drafts it is OFF unless turned on:
+# set it True (or OUTLOOK_ALLOW_WRITE=true) to offer it. Independent of
+# ALLOW_DRAFTS. With no recipients there is still nothing to send.
+ALLOW_WRITE = False
 
 # --- 7. DISABLE_KEYWORDS. Values that mean "explicitly turned off" for a
 #        folder setting. An MCP client can only pass strings, and a BLANK
@@ -1313,11 +1363,12 @@ _SEARCH_FOLDERS = list(SEARCH_ALL_FOLDERS)
 
 # Effective meeting-scheduling settings. Initialised from the configuration
 # block above; main() may replace them from OUTLOOK_MEETING_HOURS,
-# OUTLOOK_GAL_SCAN_CAP and OUTLOOK_ALLOW_DRAFTS.
+# OUTLOOK_GAL_SCAN_CAP, OUTLOOK_ALLOW_DRAFTS and OUTLOOK_ALLOW_WRITE.
 _MEETING_START_HOUR = MEETING_START_HOUR
 _MEETING_END_HOUR = MEETING_END_HOUR
 _GAL_SCAN_CAP = GAL_SCAN_CAP
 _ALLOW_DRAFTS = ALLOW_DRAFTS
+_ALLOW_WRITE = ALLOW_WRITE
 
 # Narrow the calendar with a date filter before walking it (v11.6.0), from
 # OUTLOOK_CALENDAR_PREFILTER. See _expanded_occurrences.
@@ -7613,16 +7664,15 @@ def tool_suggest_meeting_times(args):
 # Meeting scheduling - part 3: saving an UNSENT meeting draft
 # ---------------------------------------------------------------------------
 #
-# One of the two things in this server that write to the mailbox (the other
-# is the email draft below), and it is
+# One of the two drafts this server can write to the mailbox (the other is
+# the email draft below), and it is
 # deliberately the smallest write that is useful: a meeting saved into the
 # Calendar with its invitations NOT sent - the state Outlook labels
 # "Invitations have not been sent for this meeting". The user opens it, edits
 # whatever they like, and presses Send themselves.
 #
 # Send() is never called anywhere in this file, and must not be added. Set
-# OUTLOOK_ALLOW_DRAFTS=false to remove the tool altogether, after which the
-# server is read-only on the mailbox again.
+# OUTLOOK_ALLOW_DRAFTS=false to remove the tool altogether.
 
 MEETING_MAX_BODY_CHARS = 20000
 
@@ -7891,10 +7941,328 @@ def tool_draft_meeting(args):
 
 
 # ---------------------------------------------------------------------------
+# Your own appointments: straight into the calendar (v11.8.0)
+# ---------------------------------------------------------------------------
+#
+# "Here is a list of meetings, add them to my calendar." Each one becomes an
+# APPOINTMENT - MeetingStatus olNonMeeting, nobody invited - saved directly
+# into the user's own Calendar: not a draft, not opened on screen, nothing
+# left to review. With no recipients there is nobody to send anything to, so
+# "nothing here can send" still holds. A meeting with ANYONE else in it is
+# outlook_draft_meeting's job and stays a draft; this tool takes no attendees
+# at all, and refuses an item that arrives with some.
+#
+# It is the one write in this server that goes straight in without the user
+# pressing anything, so it is opt-in like every other direct write in the
+# suite: offered only when OUTLOOK_ALLOW_WRITE=true, and absent from
+# tools/list otherwise, so an update never hands an existing install a new way
+# to change the diary.
+#
+# The checks are the meeting draft's, applied to EVERY item before ANY is
+# saved: a strict 'YYYY-MM-DD HH:MM' start, the content blacklist on the
+# subject, location, body and categories, and the start read back from
+# Outlook just before Save(). One bad item means nothing is saved, so a list
+# is never half booked because of a typo in item 4. An appointment already in
+# the calendar with the same subject at the same start is skipped rather than
+# doubled, so sending the same list twice (a retry, a "did that work?") books
+# each one once.
+
+OL_NON_MEETING = 0              # AppointmentItem.MeetingStatus = olNonMeeting
+APPOINTMENTS_MAX_PER_CALL = 50
+
+# Keys that mean somebody else is in it - a meeting, not an appointment.
+_ATTENDEE_KEYS = ("attendees", "optional_attendees", "rooms", "to", "cc")
+
+# An 'end' given as a bare time, read as the same day as the start.
+_BARE_TIME = re.compile(r"^\d{1,2}:\d{2}$")
+
+
+def _subject_key(subject):
+    """A subject as compared for duplicates: case and spacing ignored."""
+    return " ".join(str(subject or "").split()).casefold()
+
+
+def _parse_appointment(spec, number):
+    """
+    Check one requested appointment. Returns (appointment dict, None) or
+    (None, problem).
+
+    The problem names the item by its POSITION in the list, never by its
+    subject, because a subject the blacklist caught must not be echoed back.
+    """
+    label = "item {0}".format(number)
+    if not isinstance(spec, dict):
+        return None, "{0} is not an object with a subject and start".format(label)
+
+    for key in _ATTENDEE_KEYS:
+        if spec.get(key):
+            return None, ("{0} has '{1}' - an appointment with anyone else "
+                          "in it is a meeting. Use outlook_draft_meeting for "
+                          "it, which saves an unsent draft".format(label, key))
+
+    subject = str(spec.get("subject") or "").strip()
+    if not subject:
+        return None, "{0} has no 'subject'".format(label)
+
+    start_text = str(spec.get("start") or "").strip()
+    if not start_text:
+        return None, "{0} has no 'start'".format(label)
+    try:
+        start = parse_meeting_start(start_text)
+    except ValueError:
+        return None, ("{0}: 'start' must be 'YYYY-MM-DD HH:MM' (24-hour), "
+                      "got {1!r}".format(label, start_text))
+
+    try:
+        duration = _int_arg(spec, "duration_minutes", MEETING_DEFAULT_MINUTES)
+    except (TypeError, ValueError):
+        return None, "{0}: 'duration_minutes' must be a whole number".format(label)
+    end_text = str(spec.get("end") or "").strip()
+    if end_text:
+        # "11:30" on its own means 11:30 on the start's own day.
+        if _BARE_TIME.match(end_text):
+            end_text = "{0} {1}".format(start.date().isoformat(), end_text)
+        try:
+            end = parse_meeting_start(end_text)
+        except ValueError:
+            return None, ("{0}: 'end' must be 'YYYY-MM-DD HH:MM' or 'HH:MM' "
+                          "(24-hour), got {1!r}".format(label, end_text))
+        duration = int((end - start).total_seconds() // 60)
+    if duration < 5 or duration > 24 * 60:
+        return None, ("{0}: it must be between 5 minutes and 24 hours long "
+                      "(got {1} minutes - is the end before the start?)"
+                      .format(label, duration))
+
+    location = str(spec.get("location") or "").strip()
+    raw_body = str(spec.get("body") or "").strip()
+    if len(raw_body) > MEETING_MAX_BODY_CHARS:
+        return None, "{0}: 'body' is longer than {1} characters".format(
+            label, MEETING_MAX_BODY_CHARS)
+    body = plain_text_body(raw_body)
+
+    busy_word = str(spec.get("busy_status") or "busy").strip().lower()
+    if busy_word not in BUSY_STATUS_NAMES:
+        return None, "{0}: 'busy_status' must be one of: {1}".format(
+            label, ", ".join(sorted(set(BUSY_STATUS_NAMES))))
+
+    try:
+        reminder = _int_arg(spec, "reminder_minutes", 15)
+    except (TypeError, ValueError):
+        return None, "{0}: 'reminder_minutes' must be a whole number".format(label)
+    if reminder < 0 or reminder > 40320:
+        return None, ("{0}: 'reminder_minutes' must be 0 (no reminder) to "
+                      "40320".format(label))
+
+    categories = spec.get("categories") or []
+    if isinstance(categories, str):
+        categories = [categories]
+    if not isinstance(categories, list):
+        return None, "{0}: 'categories' must be a list of names".format(label)
+    categories = [str(one).strip() for one in categories if str(one).strip()]
+
+    # The blacklist applies on the way IN, as for a meeting draft. Both forms
+    # of the body are scanned, so stripping markup cannot open a gap.
+    marking = blacklisted_match("\n".join(
+        [subject, location, raw_body, body] + categories))
+    if marking:
+        log("Refused to add an appointment (blacklist match: {0}).".format(marking))
+        return None, ("{0}: refused - it contains content the local content "
+                      "policy withholds from the AI. Add that one in Outlook "
+                      "directly".format(label))
+
+    return {
+        "subject": subject,
+        "start": start,
+        "end": start + datetime.timedelta(minutes=duration),
+        "duration": duration,
+        "location": location,
+        "body": body,
+        "busy": busy_word,
+        "reminder": reminder,
+        "categories": categories,
+    }, None
+
+
+def _existing_appointment_keys(first_day, last_day):
+    """
+    (start, subject key) of everything already in the user's calendar from
+    first_day to last_day, for skipping duplicates.
+
+    Returns (keys, note). keys is None when the calendar could not be read in
+    full, and note then says why, so the reply can say the check was not made
+    rather than imply there were no duplicates.
+    """
+    start_dt = datetime.datetime.combine(first_day, datetime.time(0, 0))
+    end_dt = datetime.datetime.combine(last_day, datetime.time(23, 59, 59))
+    try:
+        matches, _, _ = scan_calendar(start_dt, end_dt)
+    except Exception as exc:
+        log("Could not read the calendar to check for duplicates: {0}".format(exc))
+        return None, "the calendar could not be read ({0})".format(exc)
+    if len(matches) >= CALENDAR_HARD_CAP:
+        return None, ("those dates hold more than {0} items, too many to "
+                      "compare".format(CALENDAR_HARD_CAP))
+    keys = set()
+    for start, item in matches:
+        try:
+            keys.add((start, _subject_key(item.Subject)))
+        except Exception:
+            continue
+    return keys, None
+
+
+def _save_appointment(ns, appt):
+    """
+    Create and save ONE appointment in the user's default calendar.
+
+    Raises on anything that goes wrong, having discarded the unsaved item, so
+    a failed appointment leaves nothing behind - least of all one at the wrong
+    time.
+    """
+    item = ns.Application.CreateItem(OL_APPOINTMENT_ITEM)
+    try:
+        item.MeetingStatus = OL_NON_MEETING   # nobody invited, nothing to send
+        item.Subject = appt["subject"]
+        _set_com_datetime(item, "Start", appt["start"])
+        item.Duration = appt["duration"]
+        item.BusyStatus = BUSY_STATUS_NAMES[appt["busy"]]
+        if appt["location"]:
+            item.Location = appt["location"]
+        if appt["body"]:
+            item.Body = appt["body"]
+        if appt["reminder"]:
+            item.ReminderSet = True
+            item.ReminderMinutesBeforeStart = appt["reminder"]
+        else:
+            item.ReminderSet = False
+        if appt["categories"]:
+            item.Categories = "; ".join(appt["categories"])
+
+        # Last look before saving, as for a meeting draft: the time Outlook
+        # holds is the time asked for, or nothing is saved.
+        held = _com_to_naive(item.Start)
+        if held != appt["start"]:
+            raise RuntimeError("Outlook moved it to {0}".format(
+                held.strftime("%Y-%m-%d %H:%M") if held else "an unreadable time"))
+        item.Save()   # Save only. There are no recipients, so nothing to send.
+    except Exception:
+        _discard_mail(item)
+        raise
+
+
+def _appointment_line(appt):
+    """'Tuesday 28 October 2026, 10:00-10:30 (30m)  Dentist  [Civic]'."""
+    start, end = appt["start"], appt["end"]
+    if end.date() == start.date():
+        span = "{0}-{1}".format(_fmt_time(start), _fmt_time(end))
+    else:
+        span = "{0} to {1} {2}".format(_fmt_time(start), _fmt_day_short(end),
+                                       _fmt_time(end))
+    line = "{0}, {1} ({2})  {3}".format(_fmt_day_long(start.date()), span,
+                                        _fmt_duration(appt["duration"]),
+                                        appt["subject"])
+    if appt["location"]:
+        line += "  [{0}]".format(appt["location"])
+    return line
+
+
+def tool_add_appointments(args):
+    if not _ALLOW_WRITE:
+        return ("Adding appointments is switched off on this endpoint "
+                "(OUTLOOK_ALLOW_WRITE is not 'true'), so nothing was written "
+                "to the calendar. Tell the user it needs OUTLOOK_ALLOW_WRITE="
+                "true and a restart, or to add them in Outlook themselves.")
+
+    specs = args.get("appointments")
+    if isinstance(specs, dict):
+        specs = [specs]
+    if not isinstance(specs, list) or not specs:
+        return ("Error: 'appointments' must be a list of at least one "
+                "appointment, each with a 'subject' and a 'start'.")
+    if len(specs) > APPOINTMENTS_MAX_PER_CALL:
+        return ("Error: at most {0} appointments per call (got {1}). Send "
+                "them in batches.".format(APPOINTMENTS_MAX_PER_CALL, len(specs)))
+
+    # Every item is checked before any is written: one bad item and nothing
+    # is saved, so the list is fixed and resent whole rather than half booked.
+    wanted, problems = [], []
+    for number, spec in enumerate(specs, 1):
+        appt, problem = _parse_appointment(spec, number)
+        if problem:
+            problems.append(problem)
+        else:
+            wanted.append(appt)
+    if problems:
+        return ("Error: NOTHING was added to the calendar, because:\n"
+                + "\n".join("  - {0}".format(problem) for problem in problems)
+                + "\nFix those and send the whole list again.")
+
+    existing, check_note = _existing_appointment_keys(
+        min(appt["start"] for appt in wanted).date(),
+        max(appt["start"] for appt in wanted).date())
+
+    ns = get_namespace()
+    added, skipped, failed = [], [], []
+    booked = set()
+    for appt in wanted:
+        key = (appt["start"], _subject_key(appt["subject"]))
+        if key in booked:
+            skipped.append((appt, "listed twice, added once"))
+            continue
+        if existing is not None and key in existing:
+            skipped.append((appt, "already in the calendar"))
+            continue
+        try:
+            _save_appointment(ns, appt)
+        except Exception as exc:
+            log("Could not add an appointment at {0:%Y-%m-%d %H:%M}: {1}"
+                .format(appt["start"], exc))
+            failed.append((appt, str(exc)))
+            continue
+        booked.add(key)
+        added.append(appt)
+
+    lines = []
+    if added:
+        lines.append("Added {0} appointment{1} to the calendar - saved, not "
+                     "drafts, with nobody invited:".format(
+                         len(added), "" if len(added) == 1 else "s"))
+        lines.append("")
+        lines.extend("  {0}".format(_appointment_line(appt)) for appt in added)
+    else:
+        lines.append("Nothing new was added to the calendar.")
+    if skipped:
+        lines.append("")
+        lines.append("Not added again:")
+        lines.extend("  {0}  - {1}".format(_appointment_line(appt), reason)
+                     for appt, reason in skipped)
+    if failed:
+        lines.append("")
+        lines.append("NOT added - Outlook refused these, and nothing was saved "
+                     "for them:")
+        lines.extend("  {0}  - {1}".format(_appointment_line(appt), reason)
+                     for appt, reason in failed)
+        lines.append("Sending the same list again is safe: anything already "
+                     "added is recognised and skipped.")
+    now = datetime.datetime.now()
+    past = [appt for appt in added if appt["start"] < now]
+    if past:
+        lines.append("")
+        lines.append("Note: {0} of these start{1} in the past.".format(
+            len(past), "s" if len(past) == 1 else ""))
+    if check_note:
+        lines.append("")
+        lines.append("Note: duplicates were NOT checked for, because {0}. If "
+                     "this list was sent before, the calendar may now hold "
+                     "some of them twice.".format(check_note))
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Email drafting: an UNSENT email, opened in Outlook's own compose window
 # ---------------------------------------------------------------------------
 #
-# The second write to the mailbox, and the same kind as the meeting draft: the
+# The second draft written to the mailbox, the same kind as the meeting one: the
 # smallest write that is useful. A new email, a reply, a reply-all or a forward
 # is opened in Outlook's compose window with the agreed text in it, and saved
 # to Drafts so it cannot be lost. The user reads it, edits it and presses Send
@@ -9009,6 +9377,57 @@ TOOLS = [
         },
     },
     {
+        "name": "outlook_add_appointments",
+        "description": (
+            "Add the user's OWN appointments straight into their calendar - saved, "
+            "not drafts, not opened, nobody invited, so nothing is sent. Use it when "
+            "the user gives a list of their own commitments to put in the diary "
+            "('add these to my calendar', 'book me in for...', 'block out time "
+            "for...'). Takes several at once: pass the whole list in one call. "
+            "Anything with ANOTHER PERSON or a room in it is a meeting, not an "
+            "appointment: use outlook_draft_meeting for those, which saves an "
+            "unsent draft. Every item is checked first and one bad item means "
+            "nothing is saved; one already in the calendar (same subject, same "
+            "start) is skipped, so resending a list is safe. Work dates out from "
+            "today's date and use the user's own wording for each subject; ask "
+            "only when a time or date is genuinely missing or ambiguous."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "appointments": {
+                    "type": "array",
+                    "description": "The appointments to add, up to {0} per call.".format(
+                        APPOINTMENTS_MAX_PER_CALL),
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "subject": {"type": "string", "description": "What it is, in the user's words."},
+                            "start": {"type": "string", "description": "Start as 'YYYY-MM-DD HH:MM', 24-hour local time."},
+                            "duration_minutes": {"type": "integer", "description": "Length in minutes (default 30, 5-1440). Ignored if 'end' is given."},
+                            "end": {"type": "string", "description": "Optional end, 'YYYY-MM-DD HH:MM', or 'HH:MM' for the same day as the start. Overrides duration_minutes."},
+                            "location": {"type": "string", "description": "Free-text location, if the user gave one."},
+                            "body": {"type": "string", "description": "Optional notes, plain text. Only what the user gave - never invented."},
+                            "reminder_minutes": {"type": "integer", "description": "Reminder lead time in minutes (default 15; 0 for no reminder)."},
+                            "busy_status": {
+                                "type": "string",
+                                "enum": ["free", "tentative", "busy", "oof", "elsewhere"],
+                                "description": "How the time shows to others (default 'busy').",
+                            },
+                            "categories": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Outlook categories to apply, e.g. ['Personal'].",
+                            },
+                        },
+                        "required": ["subject", "start"],
+                    },
+                },
+            },
+            "required": ["appointments"],
+        },
+    },
+    {
         "name": "outlook_draft_email",
         "description": (
             "Open an UNSENT email in Outlook's own compose window - a new email, a "
@@ -9116,13 +9535,19 @@ TOOL_DISPATCH = {
     "outlook_suggest_meeting_times": tool_suggest_meeting_times,
     "outlook_draft_meeting": tool_draft_meeting,
     "outlook_draft_email": tool_draft_email,
+    "outlook_add_appointments": tool_add_appointments,
 }
 
-# The two draft tools are the only ones that write to the mailbox, so they are
-# removed outright - from the tool list as well as the dispatch table - when
-# drafting is switched off. Hiding them is better than refusing them later: a
-# model cannot promise the user a draft it was never offered.
+# The two draft tools write to the mailbox, so they are removed outright -
+# from the tool list as well as the dispatch table - when drafting is switched
+# off. Hiding them is better than refusing them later: a model cannot promise
+# the user a draft it was never offered.
 DRAFT_TOOLS = ("outlook_draft_meeting", "outlook_draft_email")
+
+# The tools that write to the calendar directly, with no draft in between.
+# Removed the same way unless OUTLOOK_ALLOW_WRITE=true: OFF by default, so an
+# update never hands an existing install this power.
+WRITE_TOOLS = ("outlook_add_appointments",)
 
 
 def apply_draft_setting():
@@ -9132,6 +9557,16 @@ def apply_draft_setting():
         return
     TOOLS = [tool for tool in TOOLS if tool["name"] not in DRAFT_TOOLS]
     for name in DRAFT_TOOLS:
+        TOOL_DISPATCH.pop(name, None)
+
+
+def apply_write_setting():
+    """Drop the direct-write tools unless OUTLOOK_ALLOW_WRITE turns them on."""
+    global TOOLS
+    if _ALLOW_WRITE:
+        return
+    TOOLS = [tool for tool in TOOLS if tool["name"] not in WRITE_TOOLS]
+    for name in WRITE_TOOLS:
         TOOL_DISPATCH.pop(name, None)
 
 
@@ -9261,7 +9696,11 @@ def report_directory_health():
     log("Directory scan cap  : {0} entries".format(_GAL_SCAN_CAP))
     log("Drafting            : {0}".format(
         "ON - can save an UNSENT meeting or email draft (never send one)"
-        if _ALLOW_DRAFTS else "OFF - read-only on the mailbox"))
+        if _ALLOW_DRAFTS else "OFF - neither draft tool is offered"))
+    log("Own appointments    : {0}".format(
+        "ON - outlook_add_appointments saves them straight into the calendar"
+        if _ALLOW_WRITE else "OFF (OUTLOOK_ALLOW_WRITE=true offers "
+        "outlook_add_appointments)"))
 
     try:
         me = get_namespace().CurrentUser
@@ -9639,15 +10078,17 @@ def main():
     global CALENDAR_DAY_START_HOUR, CALENDAR_DAY_END_HOUR
     global PLANNER_CONTENT_FRACTION
     global _MEETING_START_HOUR, _MEETING_END_HOUR, _GAL_SCAN_CAP, _ALLOW_DRAFTS
+    global _ALLOW_WRITE
     global _CALENDAR_PREFILTER
 
     parser = argparse.ArgumentParser(
         description=(
             "MCP server exposing local Outlook mail and calendar via COM, with a "
             "content blacklist that withholds confidential/labelled items. It can "
-            "never send anything; its only writes to the mailbox are UNSENT "
+            "never send anything; its writes to the mailbox are UNSENT "
             "meeting and email drafts (OUTLOOK_ALLOW_DRAFTS=false removes "
-            "those). With "
+            "those) and, only with OUTLOOK_ALLOW_WRITE=true, your own "
+            "appointments with nobody invited. With "
             "no check flag it runs as an stdio MCP server. Configuration is "
             "environment variables only: EVA_KNOWLEDGE_DIR (this server saves "
             "into its 'email' sub-folder), EVA_DOCUMENTS_DIR (it prints the "
@@ -9846,7 +10287,7 @@ def main():
             log("WARNING: OUTLOOK_GAL_SCAN_CAP='{0}' is not a number of 100 or "
                 "more; keeping {1}.".format(scan_cap, _GAL_SCAN_CAP))
 
-    # The only writes to the mailbox this server can make.
+    # The drafts: two of the three writes to the mailbox this server can make.
     _ALLOW_DRAFTS = env_flag("OUTLOOK_ALLOW_DRAFTS", ALLOW_DRAFTS)
     apply_draft_setting()
     if _ALLOW_DRAFTS:
@@ -9854,8 +10295,19 @@ def main():
             "into the calendar and outlook_draft_email can open an unsent "
             "email in Outlook. Neither can ever send.")
     else:
-        log("Drafting OFF (OUTLOOK_ALLOW_DRAFTS=false): the server is "
-            "read-only on the mailbox and neither draft tool is offered.")
+        log("Drafting OFF (OUTLOOK_ALLOW_DRAFTS=false): neither draft tool "
+            "is offered.")
+
+    # The one write that goes straight into the calendar: OFF unless asked.
+    _ALLOW_WRITE = env_flag("OUTLOOK_ALLOW_WRITE", ALLOW_WRITE)
+    apply_write_setting()
+    if _ALLOW_WRITE:
+        log("Own appointments ON (OUTLOOK_ALLOW_WRITE=true): "
+            "outlook_add_appointments SAVES appointments with nobody invited "
+            "straight into the calendar.")
+    else:
+        log("Own appointments OFF: outlook_add_appointments is not offered "
+            "(OUTLOOK_ALLOW_WRITE=true turns it on).")
 
     # Load any external blacklist terms and compile the filter BEFORE serving.
     extra_terms = []

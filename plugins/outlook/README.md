@@ -3,16 +3,17 @@
 Access to your local classic Outlook mail and calendar over COM, with a content
 blacklist that withholds confidential/compliance-labelled items from the AI entirely
 — plus meeting scheduling against the enterprise directory, email drafts opened
-in Outlook's own compose window, a printable PDF day planner for any day, and a
+in Outlook's own compose window, your own appointments added straight into the
+calendar (when switched on), a printable PDF day planner for any day, and a
 printable sheet of your team's open tasks.
 
 | | |
 |---|---|
-| **Server** | `outlook.py` v11.7.2 |
+| **Server** | `outlook.py` v11.8.0 |
 | **pip install** | `pywin32` |
 | **Platform** | **Windows only** — requires classic Win32 Outlook (not "New Outlook") installed, running, and logged into a profile |
 | **Sends** | **never.** Not an email, not a reply, not a meeting invitation. It cannot accept, move or delete anything either |
-| **Writes to the mailbox** | two things, both **unsent** drafts you review and send yourself: a meeting in your calendar, and an email (new, reply or forward) opened in Outlook and saved to Drafts (`OUTLOOK_ALLOW_DRAFTS=false` removes both) |
+| **Writes to the mailbox** | two things, both **unsent** drafts you review and send yourself: a meeting in your calendar, and an email (new, reply or forward) opened in Outlook and saved to Drafts (`OUTLOOK_ALLOW_DRAFTS=false` removes both). With `OUTLOOK_ALLOW_WRITE=true`, a third: your own appointments, nobody invited, saved straight into your calendar |
 | **Writes to disk** | only on request: an email saved as Markdown in `H:\Eva\knowledge\email`, or a day planner or team task sheet PDF in `H:\Eva\documents\pdf` |
 
 ## Install
@@ -53,11 +54,48 @@ touch, all optional:
 | `OUTLOOK_TASKS_TEAM` | No | Your direct reports, up to seven, as the columns of the [team task sheet](#the-team-task-sheet), e.g. `Jane Smith=jane.smith@contoso.com; Bob Jones=bob.jones@contoso.com` |
 | `OUTLOOK_TASKS_PAGE` | No | The Confluence page that collates the team's tasks (title, page ID or URL) |
 | `OUTLOOK_MEETING_HOURS` | No | Hours a meeting may be *suggested* in, e.g. `8-18` (default `9-17`) |
-| `OUTLOOK_ALLOW_DRAFTS` | No | `false` removes `outlook_draft_meeting` and `outlook_draft_email`, leaving the mailbox read-only |
+| `OUTLOOK_ALLOW_DRAFTS` | No | `false` removes `outlook_draft_meeting` and `outlook_draft_email` |
+| `OUTLOOK_ALLOW_WRITE` | No | `true` offers `outlook_add_appointments`, which puts your own appointments straight into your calendar. Blank = not offered |
 | `OUTLOOK_GAL_SCAN_CAP` | No | Entries one fuzzy name search may read (default `20000`) |
 
 The full list, including the folder overrides, is under
 [Overriding one folder, and this server's own settings](#overriding-one-folder-and-this-servers-own-settings).
+
+## Adding your own appointments
+
+> *"Here are my appointments for next week, add them to my calendar:
+> dentist Tuesday 10am, focus time Wednesday 2-4:30, site visit Thursday 9am
+> for two hours."*
+
+**Off until you set `OUTLOOK_ALLOW_WRITE=true`** (then fully restart Claude
+Code). It is the one write that lands without you pressing anything, so, like
+writing in `confluence` and `jira`, it is opt-in: until it is on, the tool is
+not even offered.
+
+| Tool | What it does |
+|---|---|
+| `outlook_add_appointments` | Saves a list of your own appointments straight into your calendar in one go — not drafts, not opened, nobody invited |
+
+- **Appointments, not meetings.** Nobody is invited, so nothing is sent. Anything
+  with another person or a room in it is a meeting, and goes through
+  [Scheduling a meeting](#scheduling-a-meeting) as an **unsent** draft instead;
+  the tool refuses an item that arrives with attendees.
+- **The whole list is checked before anything is saved.** A bad time, a missing
+  subject or a blacklisted word in any one item and nothing goes in, so a list
+  is never half booked. `start` is strictly `YYYY-MM-DD HH:MM`, for the same
+  reason as a meeting draft; `end` can be a full time or just `HH:MM` on the
+  same day, otherwise `duration_minutes` (default 30).
+- **No doubles.** One already in your calendar with the same subject at the
+  same start is skipped and listed as such, and so is one listed twice. Saying
+  the same list again (or Claude retrying) books each one once. If the
+  calendar can't be read for that check, the appointments still go in and the
+  reply says duplicates weren't checked.
+- **The time is checked the same way as a meeting draft** (see
+  [The draft](#the-draft)): read back from Outlook before saving, and not saved
+  if Outlook won't hold it.
+- Reminder 15 minutes and shown as busy, unless you say otherwise; location,
+  notes and categories if you give them. Up to 50 per call. Timed appointments
+  only - no all-day events.
 
 ## Scheduling a meeting
 
@@ -654,7 +692,7 @@ This plugin ships three, and installing it installs all of them:
 
 | Skill | For |
 |---|---|
-| `/outlook:outlook` | Mail, reading the calendar, printing a day planner, saving an email to the knowledge base |
+| `/outlook:outlook` | Mail, reading the calendar, adding your own appointments, printing a day planner, saving an email to the knowledge base |
 | `/outlook:meeting-scheduler` | Arranging a meeting: finding the person and the room, finding a time, saving the draft |
 | `/outlook:team-tasks` | Printing your team's open tasks from Confluence and the emails you sent with a due date as a double-sided sheet |
 
@@ -733,7 +771,8 @@ only when an endpoint's layout really differs.
 | `OUTLOOK_REQUIRE_BLACKLIST=1` | Fail closed: refuse to start unless the content blacklist has at least one active term, so a missing or empty terms file cannot silently disable the compliance filter. Also settable via the `REQUIRE_BLACKLIST` constant in the file |
 | `OUTLOOK_MEETING_HOURS` | The hours a meeting may be **suggested** in, e.g. `8-18` (default `9-17`). Separate from `OUTLOOK_CALENDAR_HOURS` above on purpose — see [Finding a time](#finding-a-time) |
 | `OUTLOOK_GAL_SCAN_CAP` | How many address-list entries one fuzzy name search may read before giving up (default `20000`). Raise it on a very large GAL if people go missing; a search that stops early says so in its reply |
-| `OUTLOOK_ALLOW_DRAFTS=false` | Remove `outlook_draft_meeting` and `outlook_draft_email` altogether, leaving the server read-only on the mailbox |
+| `OUTLOOK_ALLOW_DRAFTS=false` | Remove `outlook_draft_meeting` and `outlook_draft_email` altogether |
+| `OUTLOOK_ALLOW_WRITE=true` | Offer `outlook_add_appointments`, which saves your own appointments (nobody invited) straight into your calendar - see [Adding your own appointments](#adding-your-own-appointments). Blank or unset: not offered. With this off and `OUTLOOK_ALLOW_DRAFTS=false`, the server is read-only on the mailbox |
 | `OUTLOOK_CALENDAR_PREFILTER=false` | Read the calendar the old, slow way, walking every item instead of narrowing to the dates asked for first - see [Speed](#speed). Only for a `--check` that reports a MISMATCH; blank or unset leaves the filter on |
 
 **Blank does not mean off.** A blank value means "not configured", so the shared
@@ -798,10 +837,12 @@ saved as Markdown inside the knowledge-base folder, or a day planner or team
 task sheet written as a PDF inside the documents folder. It writes nowhere else, and it reads no local
 folder at all (the optional blacklist file is read once at startup).
 
-In the **mailbox**, the only writes are the two drafts: `outlook_draft_meeting`
+In the **mailbox**, the writes are the two drafts - `outlook_draft_meeting`
 saves an unsent meeting into your calendar, and `outlook_draft_email` opens an
-unsent email in Outlook and saves it to Drafts. Nothing can send, accept, move
-or delete — `Send()` is never called anywhere in the file, and
+unsent email in Outlook and saves it to Drafts - and, only with
+`OUTLOOK_ALLOW_WRITE=true`, `outlook_add_appointments`, which saves your own
+appointments (nobody invited) into your calendar. Nothing can send, accept,
+move or delete — `Send()` is never called anywhere in the file, and
 `OUTLOOK_ALLOW_DRAFTS=false` removes both draft tools.
 
 ## Usage examples
@@ -824,6 +865,7 @@ or delete — `Send()` is never called anywhere in the file, and
 14. "Find a suitable time with Josh Smith in Room R5-3-84." → `outlook_find_people` twice, then `outlook_suggest_meeting_times`
 15. "When are Josh and Sam both free for an hour next week?" → `outlook_suggest_meeting_times` with `duration_minutes: 60`, `start_date: "+7"`
 16. "Book the Tuesday 10am one." → `outlook_draft_meeting` — saved to your calendar **unsent**, opened for you to review and send
+16a. "Add these to my calendar: dentist Tue 10am, focus time Wed 2-4:30pm, site visit Thu 9am for 2 hours." → `outlook_add_appointments` with all three — saved straight in, nobody invited (needs `OUTLOOK_ALLOW_WRITE=true`)
 17. "Draft an agenda for the migration review." … "Now find a time with Josh Mann to discuss." → the agenda is carried into the meeting body, shown to you, then drafted
 18. "Draft a reply to Josh's email about the budget." … "Warmer." … "Ok, put that in Outlook." → written and reworked in the chat, then `outlook_draft_email` with `mode: "reply"` opens it in Outlook, signature and all, for you to send
 

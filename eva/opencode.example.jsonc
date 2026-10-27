@@ -128,6 +128,7 @@
         "OUTLOOK_TASKS_PAGE": "",
         "OUTLOOK_MEETING_HOURS": "",
         "OUTLOOK_ALLOW_DRAFTS": "",
+        "OUTLOOK_ALLOW_WRITE": "",
         "OUTLOOK_GAL_SCAN_CAP": "",
         // Tuning: "1" refuses to start without a blacklist file; "true" saves
         // every email read to the knowledge base, not just the ones you ask for;

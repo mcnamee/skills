@@ -1,6 +1,6 @@
 ---
 name: outlook
-description: Read Outlook mail and calendar via the outlook MCP server (COM automation, Windows; cannot send anything), put an agreed email or reply into Outlook as an unsent draft, and print a day's calendar as a PDF day planner. Use when the user asks about their emails, wants mail searched or summarised, says to put a drafted email into Outlook ("ok, send that to Outlook", "open it in Outlook"), asks what's on their calendar, asks for a printable/printed calendar, day planner or agenda for today or tomorrow, or asks for an email to be saved into the knowledge base. For scheduling a meeting with someone, use the meeting-scheduler skill instead; for a printed sheet of the team's tasks, use team-tasks.
+description: Read Outlook mail and calendar via the outlook MCP server (COM automation, Windows; cannot send anything), put an agreed email or reply into Outlook as an unsent draft, add the user's own appointments straight into their calendar, and print a day's calendar as a PDF day planner. Use when the user asks about their emails, wants mail searched or summarised, says to put a drafted email into Outlook ("ok, send that to Outlook", "open it in Outlook"), asks what's on their calendar, gives a list of their own appointments or meetings to put in the diary ("add these to my calendar", "book me in for the dentist Tuesday 10am", "block out Wednesday afternoon"), asks for a printable/printed calendar, day planner or agenda for today or tomorrow, or asks for an email to be saved into the knowledge base. For scheduling a meeting with someone else (finding a time, inviting people, booking a room), use the meeting-scheduler skill instead; for a printed sheet of the team's tasks, use team-tasks.
 ---
 
 # Outlook (via the `outlook` MCP server)
@@ -15,7 +15,8 @@ covers `outlook_find_people`, `outlook_suggest_meeting_times` and
 `outlook_draft_meeting`. **Printing the team's tasks** ("print my team's
 tasks", a task sheet for my direct reports) → use **`team-tasks`**, which
 covers `outlook_get_task_team` and `outlook_print_team_tasks`. Everything
-below is mail, calendar reading and printing a day.
+below is mail, calendar reading, adding the user's own appointments and
+printing a day.
 
 ## Tools
 
@@ -33,6 +34,7 @@ below is mail, calendar reading and printing a day.
 | `outlook_find_people` | Fuzzy-find a person or room in the directory — see `meeting-scheduler` |
 | `outlook_suggest_meeting_times` | When everyone is free — see `meeting-scheduler` |
 | `outlook_draft_meeting` | Save an **unsent** meeting draft — see `meeting-scheduler` |
+| `outlook_add_appointments` | Put a list of the user's **own** appointments (nobody invited) straight into the calendar — see below. Only there when `OUTLOOK_ALLOW_WRITE=true` |
 | `outlook_draft_email` | Open an agreed email / reply / forward in Outlook **unsent**, with the user's signature — see below |
 
 ## Workflow
@@ -82,6 +84,51 @@ in Outlook", "open it as a draft", "pop it into Outlook". Then:
 If `outlook_draft_email` is not in your tools, drafting is switched off on this
 endpoint (`OUTLOOK_ALLOW_DRAFTS=false`): say so, and leave the agreed text in
 the chat for them to paste into Outlook.
+
+## Adding the user's own appointments
+
+"Here is a list of meetings, add them to my calendar", "book me in for the
+dentist Tuesday at 10", "block out Wednesday 2-4:30 for focus time" →
+`outlook_add_appointments`. Each one is saved **straight into the calendar**:
+not a draft, not opened on screen, nothing for the user to send. Keep it low
+effort - that is the point.
+
+1. **Is anyone else in it?** An appointment is the user's alone. If an item
+   names another person or a room ("with Josh", "in R5-3-84", "invite the
+   team"), it is a **meeting**: leave it out of this call and handle it with
+   `meeting-scheduler`, which saves an **unsent draft** at the time the user
+   gave. A list that mixes the two → add the user's own ones
+   now, and say which ones you're treating as meetings. A meeting the user is
+   merely attending, with nobody named ("project board 2pm Thursday"), is
+   their own appointment - nobody is invited by adding it.
+2. **Work out each one and call once.** Resolve "Tuesday", "next Friday",
+   "2-4:30pm" against today's date into `start` as `YYYY-MM-DD HH:MM`
+   (24-hour), with `end` (a full time, or just `HH:MM` on the same day) or
+   `duration_minutes` (default 30). Use the user's own words for `subject`;
+   add `location` and `body` only from what they gave. Pass the **whole list
+   in one call**, not one call per appointment.
+3. **Ask only when you must.** A missing time, or a date you genuinely can't
+   pin down ("the 5th" with two candidate months), is a question; a missing
+   duration is not - use 30 minutes and say so. Don't read the list back for
+   confirmation first: the user asked for it to go straight in.
+4. **Report back briefly**: the tool lists what it added, what was already
+   there, and anything Outlook refused. Pass that on in a few lines. Say they
+   are **in the calendar**; never say anyone was invited.
+
+- **One bad item and nothing is saved.** The reply names the items by number
+  (item 1 is the first in your list): fix those and send the whole list again.
+- **Resending is safe.** An appointment already in the calendar with the same
+  subject at the same start is skipped, so retrying a list books each once. If
+  the reply says duplicates could not be checked, tell the user to glance at
+  the calendar.
+- **All-day events aren't supported**, and neither is a recurring series. Say
+  so and suggest they add those in Outlook, or add the timed ones and list the
+  rest.
+- If `outlook_add_appointments` is not in your tools, it is switched off on
+  this endpoint: tell the user it needs `OUTLOOK_ALLOW_WRITE=true` in Claude
+  Code's settings `env` block, then a full restart. Don't fall back to
+  `outlook_draft_meeting` for these - that would leave them a pile of drafts
+  to open and save, which is what they asked to avoid.
 
 ## Printing a day planner
 
@@ -173,10 +220,12 @@ KB". The file lands in `H:\Eva\knowledge\email` and the tool reports the path.
 
 - **It cannot send anything** — not mail, not a reply, not a meeting
   invitation — and cannot accept, delete or move anything. Never promise to.
-  It writes five things, each only when asked: a saved email, a printed
+  It writes six things, each only when asked: a saved email, a printed
   planner, a printed team task sheet, an **unsent** meeting draft (`outlook_draft_meeting`) and an
   **unsent** email draft (`outlook_draft_email`), both of which the user then
-  sends themselves.
+  sends themselves, and - where `OUTLOOK_ALLOW_WRITE=true` - the user's own
+  appointments (`outlook_add_appointments`), saved straight into the calendar
+  with nobody invited.
 - A compliance blacklist may withhold messages/folders entirely; blocked
   items appear only as a withheld count. Do not speculate about their content,
   and never try to work around the filter.
