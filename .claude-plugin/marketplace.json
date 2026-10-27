@@ -1,0 +1,106 @@
+{
+  "name": "mcnamee-agent-skills",
+  "owner": {
+    "name": "mcnamee",
+    "url": "https://github.com/mcnamee/agent-skills"
+  },
+  "description": "Single-file MCP servers for working with Word, PowerPoint, Excel, Outlook, Confluence, Jira, PDFs and a local RAG knowledge base. Each plugin bundles one server with its matching skill, so it installs and updates as one unit - including fully offline.",
+  "plugins": [
+    {
+      "name": "word",
+      "source": "./plugins/word",
+      "description": "Read, edit and create Word .docx files - including Word tracked changes, native styles and filling out templates.",
+      "version": "10.0.2",
+      "keywords": [
+        "word",
+        "docx",
+        "tracked-changes",
+        "documents"
+      ]
+    },
+    {
+      "name": "powerpoint",
+      "source": "./plugins/powerpoint",
+      "description": "Build PowerPoint decks that inherit your own template's layouts and theme, and audit them against Guy Kawasaki's 10/20/30 rule.",
+      "version": "6.0.2",
+      "keywords": [
+        "powerpoint",
+        "pptx",
+        "presentation",
+        "slides",
+        "kawasaki"
+      ]
+    },
+    {
+      "name": "excel",
+      "source": "./plugins/excel",
+      "description": "Read and analyse Excel workbooks - sheets, Tables by name and pivot tables - by parsing .xlsx directly. Also writes cells and Table rows and creates real PivotTables through the installed Excel (Windows, pywin32).",
+      "version": "6.1.1",
+      "keywords": [
+        "excel",
+        "xlsx",
+        "spreadsheet"
+      ]
+    },
+    {
+      "name": "outlook",
+      "source": "./plugins/outlook",
+      "description": "Read local classic Outlook mail and calendar via COM, schedule a meeting (fuzzy directory search, free/busy, and an unsent draft you send yourself), open an agreed email or reply in Outlook as an unsent draft, and print a day as a PDF planner in your own category colours. Windows only; requires pywin32.",
+      "version": "11.7.2",
+      "keywords": [
+        "outlook",
+        "email",
+        "calendar",
+        "meeting",
+        "scheduling",
+        "planner",
+        "windows"
+      ]
+    },
+    {
+      "name": "confluence",
+      "source": "./plugins/confluence",
+      "description": "Search and read Confluence pages across one or two instances, with macro content (task reports, page properties, panels, inline tasks) included; refresh a page's figures, dates and statuses in place without breaking its layout, panels or colours, edit the tables on a page in place (even inside table filter or column macros), and create, update and append to pages, and upload attachments (replacing an image on a page); download page attachments into the folder the matching plugin reads; save a page to the knowledge base when you ask - writing only when switched on.",
+      "version": "8.0.1",
+      "keywords": [
+        "confluence",
+        "wiki",
+        "documentation"
+      ]
+    },
+    {
+      "name": "jira",
+      "source": "./plugins/jira",
+      "description": "Query Jira issues, sprints and projects, and - when switched on - create, edit, comment on and transition issues (Jira Data Center v2 REST API).",
+      "version": "3.4.3",
+      "keywords": [
+        "jira",
+        "issues",
+        "tickets"
+      ]
+    },
+    {
+      "name": "knowledge-base",
+      "source": "./plugins/knowledge-base",
+      "description": "True RAG over your own Markdown docs: a local ChromaDB vector index plus your embeddings API. Captures new notes back into it. Requires chromadb.",
+      "version": "6.0.1",
+      "keywords": [
+        "rag",
+        "knowledge-base",
+        "search",
+        "embeddings"
+      ]
+    },
+    {
+      "name": "pdf-to-md",
+      "source": "./plugins/pdf-to-md",
+      "description": "Convert PDFs to Markdown with tables preserved, for feeding a local knowledge base. Requires pymupdf.",
+      "version": "7.0.1",
+      "keywords": [
+        "pdf",
+        "markdown",
+        "convert"
+      ]
+    }
+  ]
+}

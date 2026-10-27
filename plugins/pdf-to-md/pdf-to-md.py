@@ -1,0 +1,1038 @@
+#!/usr/bin/env python3
+r"""
+pdf-to-md.py (v7.0.1) - Self-contained MCP (Model Context Protocol) stdio
+server that converts PDFs in a folder to Markdown, including tables (both
+bordered and borderless).
+
+=============================================================================
+ DEPENDENCIES
+=============================================================================
+Beyond the Python standard library, this needs two packages (the second pulls
+in table/layout handling):
+
+    pip install pymupdf pymupdf4llm
+
+If your network's pip proxy needs to be named explicitly:
+
+    pip install --proxy http://YOUR-PROXY:PORT pymupdf pymupdf4llm
+
+Notes:
+  * pymupdf4llm depends on pymupdf (PyMuPDF), so installing it usually pulls
+    pymupdf in automatically; both are listed for clarity.
+  * INTERPRETER MATCH (common gotcha): install into the SAME Python that the
+    MCP client launches this server with. If you install with one "pip" but
+    the client runs a different Python, the server reports the package as
+    missing even though "pip show pymupdf4llm" lists it. The reliable way is
+    to use ONE explicit interpreter for both steps:
+        & "C:\path\to\python.exe" -m pip install pymupdf pymupdf4llm
+    and give that same full path as the interpreter in the config below
+    (instead of a bare "python"). Verify with:
+        & "C:\path\to\python.exe" -c "import pymupdf4llm, fitz; print(pymupdf4llm.__file__)"
+    On startup this server logs its own interpreter path (sys.executable) to
+    stderr - compare it against where the packages are installed.
+  * OCR (for scanned, image-only PDFs) additionally needs Tesseract installed
+    on the machine. It is NOT required for normal text PDFs or their tables.
+    Without Tesseract, text PDFs still convert; scanned pages simply produce
+    no text and are reported as a per-file failure.
+
+=============================================================================
+ CONFIGURATION  (four environment variables, no folder flags)
+=============================================================================
+The whole plugin suite is configured by FOUR environment variables. Set them
+once for your Windows account and every plugin in this repo picks them up;
+this server uses three:
+
+    EVA_PYTHON          full path to the python.exe that has pymupdf4llm
+                        installed, e.g. C:\Python311\python.exe (read by the
+                        plugin manifest, not by this file)
+    EVA_DOCUMENTS_DIR   root of the document library (default H:\Eva\documents)
+    EVA_KNOWLEDGE_DIR   root of the RAG corpus       (default H:\Eva\knowledge)
+
+This server works in the "pdf" sub-folder of each root - the same arrangement
+as every other plugin. BOTH FOLDERS MUST EXIST:
+
+    %EVA_DOCUMENTS_DIR%\pdf   REQUIRED. The source PDFs, read-only: conversion
+                              never alters a PDF. Only the top level is
+                              converted unless PDF2MD_RECURSIVE=1.
+    %EVA_KNOWLEDGE_DIR%\pdf   REQUIRED. Where the converted Markdown is
+                              written. It sits inside the knowledge-base
+                              plugin's corpus on purpose: converting a PDF is
+                              then the same act as adding it to the RAG index.
+
+To set them permanently for your account (PowerShell, one-off):
+
+    [Environment]::SetEnvironmentVariable("EVA_PYTHON", "C:\Python311\python.exe", "User")
+    [Environment]::SetEnvironmentVariable("EVA_DOCUMENTS_DIR", "H:\Eva\documents", "User")
+    [Environment]::SetEnvironmentVariable("EVA_KNOWLEDGE_DIR", "H:\Eva\knowledge", "User")
+
+Copy the repo's eva\ folder to H:\Eva and both folders exist, correctly
+related to each other - see eva\README.md.
+
+Server-specific settings, all optional and all environment variables:
+
+    PDF2MD_DOCS_DIR         override ONE folder with a full path of its own,
+    PDF2MD_KB_DIR           for an endpoint whose layout differs.
+    PDF2MD_RECURSIVE=1      also convert sub-folders of the PDF folder; the
+                            sub-folder structure is mirrored in the output.
+    PDF2MD_KEEP_IMAGE_REFS=1
+                            KEEP the image references and "missing image"
+                            placeholder text that are stripped by default.
+                            See "IMAGES" below for exactly what is removed.
+
+There are NO folder command-line flags: configuration is environment
+variables only, so two settings can never disagree about a path. The only
+flags this server takes are --check and --version.
+
+=============================================================================
+ INSTALLING INTO CLAUDE CODE
+=============================================================================
+This server ships as the "pdf-to-md" Claude Code plugin (its manifest is
+.claude-plugin/plugin.json next to this file), so the normal install is:
+
+    /plugin marketplace add C:\path\to\agent-skills
+    /plugin install pdf-to-md@mcnamee-agent-skills
+
+It prompts for nothing: the interpreter and both folders come from the
+environment variables above. PYTHONUTF8=1 (which prevents stdout encoding
+crashes on Windows) is set for you by the manifest.
+
+To register the server by hand instead (PowerShell):
+
+    claude mcp add pdf2md --scope user -e PYTHONUTF8=1 -- $env:EVA_PYTHON C:\path\to\pdf-to-md.py
+
+See README.md next to this file for the full settings reference.
+
+=============================================================================
+ MANUAL TESTING (PowerShell, on the target box, outside the MCP client)
+=============================================================================
+Feed newline-delimited JSON-RPC on stdin. Use a here-string (NOT an inline
+echo with nested JSON, which silently drops the "arguments" object):
+
+    $msgs = @'
+    {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}
+    {"jsonrpc":"2.0","id":2,"method":"tools/list"}
+    {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"convert_all_pdfs","arguments":{}}}
+    '@
+    $env:EVA_DOCUMENTS_DIR = "H:\Eva\documents"; $env:EVA_KNOWLEDGE_DIR = "H:\Eva\knowledge"
+    $msgs | python C:\path\to\pdf-to-md.py
+
+Expected: three JSON lines on stdout (initialize result, tool list, conversion
+summary). Diagnostics appear on stderr and never on stdout.
+
+To test the single-file fuzzy tool, replace the third line with:
+    {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"convert_pdf_to_markdown","arguments":{"query":"procurement policy"}}}
+
+A quick conversion check (no MCP) - the file name has a dash, so it has to
+be loaded by path rather than imported by name:
+
+    python -c "import importlib.util as u; s=u.spec_from_file_location('p', r'C:\path\to\pdf-to-md.py'); m=u.module_from_spec(s); s.loader.exec_module(m); print(m.convert_one(r'H:\Eva\documents\pdf\Some File.pdf')[1][:800])"
+
+=============================================================================
+ TOOLS EXPOSED
+=============================================================================
+1. convert_all_pdfs
+   Convert every PDF in the input folder to Markdown in the output folder.
+   PDFs whose .md already exists are SKIPPED unless force=true. Backs the
+   request "convert all pdfs to markdown".
+
+2. convert_pdf_to_markdown
+   Convert a single PDF identified by a rough name (e.g. "procurement
+   policy"). Refuses to guess when several PDFs match equally well.
+
+=============================================================================
+ CONVERSION BEHAVIOUR
+=============================================================================
+  * Extraction uses pymupdf4llm, which handles reading order, headings, and
+    TABLES - both bordered (ruling lines) and borderless (column alignment).
+  * Post-processing then:
+      - removes image references and "missing image" placeholder text (see
+        below);
+      - rejoins list markers that land on their own line (the "1." on one
+        line, content on the next" problem) with their content;
+      - collapses any run of 2+ blank lines into a single blank line;
+      - strips trailing whitespace from every line.
+  * Table rows are never altered by the list-marker fix.
+
+IMAGES
+------
+Nothing here ever writes or embeds an image file, so every image reference
+in the raw output points at a file that does not exist - a dangling
+"missing image" that is pure noise once the Markdown is in a knowledge
+base. Those are removed by default. What goes:
+
+  * Markdown image links - "![alt](name.pdf-0003-01.png)" and the
+    "![alt][ref]" form - plus any HTML <img> tag.
+  * pymupdf4llm's "<!-- Start of picture text -->" / "<!-- End of picture
+    text -->" markers. The text BETWEEN them is real text found inside a
+    picture, so it is kept; only the commentary goes, and the <br>
+    separators it uses become real line breaks. (<br> elsewhere - inside
+    table cells - is left alone.)
+  * Placeholder wording the SOURCE PDF itself carries where a picture
+    failed to load, which is common in PDFs printed from Outlook or Word:
+    "Image removed by sender.", the "Right-click here to download
+    pictures..." sentence, "This image cannot currently be displayed.",
+    "The linked image cannot be displayed..." and "[cid:...]" inline-image
+    tokens. The full list is the MISSING_IMAGE_PHRASES constant below.
+
+A line left holding nothing but its bullet or number once a reference is
+removed collapses to a blank line, so no stray markers are left behind.
+
+Set PDF2MD_KEEP_IMAGE_REFS=1 to turn all of this off and get the raw
+pymupdf4llm output back.
+
+=============================================================================
+ TRANSPORT NOTES (MCP over stdio)
+=============================================================================
+  * stdout carries ONLY newline-delimited JSON-RPC 2.0. Nothing else.
+  * All diagnostics go to stderr.
+  * PyMuPDF/MuPDF and pymupdf4llm emit advisory text (and occasionally raw
+    bytes) to the C-level stdout on import and during conversion. Those calls
+    are wrapped so OS-level stdout (fd 1) is redirected away for their
+    duration, keeping the JSON-RPC stream clean.
+  * Outgoing JSON uses ensure_ascii=True, so the stdout stream stays pure
+    ASCII regardless of document content.
+"""
+
+# Semantic version of this server. Bump on EVERY change (see CLAUDE.md):
+# MAJOR = breaking config/tool change, MINOR = new feature, PATCH = fix.
+__version__ = "7.0.1"
+
+import argparse
+import contextlib
+import difflib
+import json
+import os
+import re
+import sys
+import traceback
+from pathlib import Path
+
+
+# --------------------------------------------------------------------------
+# OS-level stdout suppression (protects the JSON-RPC channel)
+# --------------------------------------------------------------------------
+@contextlib.contextmanager
+def _suppress_fd_stdout():
+    """Redirect OS-level stdout (fd 1) to the null device for the duration of
+    the block. This catches C-level prints from MuPDF / pymupdf4llm that a
+    Python-level redirect would miss."""
+    saved_fd = os.dup(1)
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(devnull_fd, 1)
+        yield
+    finally:
+        os.dup2(saved_fd, 1)
+        os.close(saved_fd)
+        os.close(devnull_fd)
+
+
+# Import the heavy libraries with stdout suppressed (banner safety). Each is
+# imported separately so the error names the EXACT module that is missing -
+# the usual cause is an interpreter mismatch (the package was pip-installed
+# into a different Python than the one the MCP client launches this server with).
+fitz = None
+pymupdf4llm = None
+IMPORT_ERROR = None
+try:
+    with _suppress_fd_stdout():
+        import fitz  # PyMuPDF
+except Exception as _exc:  # noqa: BLE001 - surfaced lazily at call time
+    IMPORT_ERROR = "PyMuPDF (fitz) failed to import: {!r}".format(_exc)
+if IMPORT_ERROR is None:
+    try:
+        with _suppress_fd_stdout():
+            import pymupdf4llm
+    except Exception as _exc:  # noqa: BLE001 - surfaced lazily at call time
+        IMPORT_ERROR = "pymupdf4llm failed to import: {!r}".format(_exc)
+
+
+# --------------------------------------------------------------------------
+# Configuration constants
+# --------------------------------------------------------------------------
+SERVER_NAME = "pdf2md-mcp"
+SERVER_VERSION = __version__
+
+# ---------------------------------------------------------------------------
+# CONFIG: folders come from the environment; these are the fallbacks.
+# ---------------------------------------------------------------------------
+# Four environment variables configure the whole plugin suite. Set them once
+# for your Windows account and every plugin picks them up; each server works in
+# its OWN sub-folder of each root, named after the plugin. This server's
+# sub-folder is "pdf":
+#
+#   EVA_DOCUMENTS_DIR   -> %EVA_DOCUMENTS_DIR%\pdf   source PDFs, read-only
+#   EVA_KNOWLEDGE_DIR   -> %EVA_KNOWLEDGE_DIR%\pdf   the converted Markdown
+#
+# The two roots below are the fallback when a variable is not set, and match
+# the Eva working tree - copy the repo's eva\ folder to H:\Eva and both folders
+# exist. See eva\README.md. There are NO folder command-line flags:
+# configuration is environment variables only, so two settings can never
+# disagree about a path. To point ONE folder somewhere else, set
+# PDF2MD_DOCS_DIR / PDF2MD_KB_DIR to a full path of its own.
+# ---------------------------------------------------------------------------
+SUBFOLDER = "pdf"                  # this server's sub-folder in each root
+EVA_DOCUMENTS_DIR = r"H:\Eva\documents"
+EVA_KNOWLEDGE_DIR = r"H:\Eva\knowledge"
+
+# Resolved from the environment in parse_args(); the literals here are what a
+# stock H:\Eva install resolves to.
+#
+# Where the source PDFs live. Read-only: conversion never alters a PDF. Only
+# the top level is converted unless PDF2MD_RECURSIVE=1.
+DOCS_DIR = r"H:\Eva\documents\pdf"
+
+# Where the converted Markdown is written. This sits INSIDE the knowledge-base
+# plugin's corpus (H:\Eva\knowledge) on purpose: converting a PDF is then the
+# same act as adding it to the RAG corpus. Point it somewhere outside that
+# folder and the Markdown will pile up unindexed.
+OUTPUT_DIR = r"H:\Eva\knowledge\pdf"
+
+# Keep image references and "missing image" placeholder text in the Markdown?
+# Default False: this server never writes or embeds image files, so every image
+# reference in the raw output is dangling, and placeholder wording carried over
+# from Outlook/Word is noise in a knowledge base. Override with
+# PDF2MD_KEEP_IMAGE_REFS=1.
+KEEP_IMAGE_REFS = False
+
+DEFAULT_PROTOCOL_VERSION = "2024-11-05"
+
+# Table detection strategy passed to pymupdf4llm. "lines_strict" is the
+# library default and detected both bordered and borderless tables in testing.
+# Alternatives if a particular document misbehaves: "lines" or "text".
+TABLE_STRATEGY = "lines_strict"
+
+# Fuzzy matching (single-file tool).
+MIN_RATIO = 0.40
+AMBIGUITY_DELTA = 0.05
+
+# Cap Markdown inlined into a single tool result (full text is always written
+# to the .md file regardless).
+MAX_INLINE_CHARS = 20000
+
+
+# Marker-only line patterns. Bare "-" and "*" are deliberately excluded to
+# avoid merging stray separators; numbered / parenthesised / lettered /
+# bulleted markers are covered.
+MARKER_ONLY_RE = re.compile(
+    r"^\s*(?:"
+    r"\(\d{1,3}\)"                  # (1)
+    r"|\d{1,3}[.)]"                 # 1.  1)
+    r"|\([a-zA-Z]\)"                # (a)
+    r"|[a-zA-Z][.)]"                # a.  a)
+    r"|[ivxlcdmIVXLCDM]{1,5}[.)]"   # ii.  iv)
+    r"|[\u2022\u25aa\u25e6\u00b7\u2023]"  # bullets
+    r")\s*$"
+)
+LEADING_BULLET_RE = re.compile(r"^\s*[\u2022\u25aa\u25e6\u00b7\u2023]\s+")
+
+
+# --------------------------------------------------------------------------
+# Image artefacts (removed unless PDF2MD_KEEP_IMAGE_REFS=1)
+# --------------------------------------------------------------------------
+# pymupdf4llm wraps text it finds INSIDE a picture in these two comments,
+# joining the picture's lines with <br> on a single line. The text itself is
+# real page text and is kept; the commentary around it is not. Matched as a
+# pair so the <br> rewrite stays inside the block - <br> is also how table
+# cells separate their lines, and those must not be touched.
+PICTURE_TEXT_BLOCK_RE = re.compile(
+    r"[ \t]*<!--\s*Start\s+of\s+picture\s+text\s*-->[ \t]*\n?"
+    r"(?P<body>.*?)"
+    r"\n?[ \t]*<!--\s*End\s+of\s+picture\s+text\s*-->[ \t]*",
+    re.DOTALL | re.IGNORECASE,
+)
+
+BR_TAG_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+
+# Placeholder wording the SOURCE document carries where a picture failed to
+# load - overwhelmingly PDFs printed from Outlook or Word. This is boilerplate
+# ABOUT a missing image, never document content, so it goes with the rest.
+# Add a phrase here if your PDFs carry one that is not listed.
+MISSING_IMAGE_PHRASES = (
+    # Outlook, where a remote image was blocked or stripped.
+    r"Image\s+removed\s+by\s+sender\.?",
+    r"Right[- ]click\s+here\s+to\s+download\s+pictures\.?"
+    r"(?:\s*To\s+help\s+protect\s+your\s+privacy,?\s*(?:Microsoft\s+)?"
+    r"Outlook\s+prevented\s+automatic\s+download\s+of\s+th(?:is|ese)\s+"
+    r"pictures?\s+from\s+the\s+Internet\.?)?",
+    # Word / PowerPoint placeholders for a picture they could not render.
+    r"This\s+image\s+cannot\s+currently\s+be\s+displayed\.?",
+    r"The\s+linked\s+image\s+cannot\s+be\s+displayed\.?"
+    r"(?:\s*The\s+file\s+may\s+have\s+been\s+moved,?\s+renamed,?\s+or\s+"
+    r"deleted\.?)?"
+    r"(?:\s*Verify\s+that\s+the\s+link\s+points\s+to\s+the\s+correct\s+"
+    r"file\s+and\s+location\.?)?",
+    # Inline-image content-ID token left by an email-to-PDF print.
+    r"[\[<]cid:[^\]>\n]*[\]>]",
+)
+
+# One pass removes: Markdown image links (both ![alt](path) and ![alt][ref]),
+# HTML <img> tags, an unpaired picture-text marker that PICTURE_TEXT_BLOCK_RE
+# could not match, and every phrase above.
+IMAGE_ARTEFACT_RE = re.compile(
+    "|".join(
+        (
+            r"!\[[^\]\n]*\](?:\([^)\n]*\)|\[[^\]\n]*\])",
+            r"<img\b[^>]*>",
+            r"<!--\s*(?:Start|End)\s+of\s+picture\s+text\s*-->",
+        )
+        + MISSING_IMAGE_PHRASES
+    ),
+    re.IGNORECASE,
+)
+
+# A line holding nothing but a bullet, heading hash or list number once its
+# image reference has been removed. Deliberately single-character for the
+# bullets so a "---" horizontal rule or table separator is never matched.
+ORPHAN_MARKER_RE = re.compile(
+    r"^(?:[-*+>]|#{1,6}|\(?\d{1,3}[.)]|\([a-zA-Z]\))?$"
+)
+
+
+# --------------------------------------------------------------------------
+# Logging (stderr only)
+# --------------------------------------------------------------------------
+def log(message):
+    print("[{}] {}".format(SERVER_NAME, message), file=sys.stderr, flush=True)
+
+
+# --------------------------------------------------------------------------
+# Markdown post-processing
+# --------------------------------------------------------------------------
+def _normalise_marker(marker):
+    """Turn a detected list marker into a tidy Markdown form."""
+    m = marker.strip()
+    digits = re.match(r"^\(?(\d{1,3})\)?[.)]?$", m)
+    if digits:
+        return digits.group(1) + "."
+    if re.match(r"^[\u2022\u25aa\u25e6\u00b7\u2023]$", m):
+        return "-"
+    return m  # letters / roman numerals kept as-is
+
+
+def _is_table_block(block):
+    """True if every non-blank line in the block is a Markdown table row."""
+    lines = [ln for ln in block.splitlines() if ln.strip()]
+    return bool(lines) and all(ln.lstrip().startswith("|") for ln in lines)
+
+
+def _is_heading_block(block):
+    return block.lstrip().startswith("#")
+
+
+def _tidy_block(block):
+    """Light tidy for non-table blocks (normalise a leading unicode bullet)."""
+    if _is_table_block(block):
+        return block
+    return LEADING_BULLET_RE.sub("- ", block)
+
+
+def _unwrap_picture_text(match):
+    """Keep the text found inside a picture, drop the markers around it and
+    turn the <br> separators back into real line breaks."""
+    return BR_TAG_RE.sub("\n", match.group("body")).strip("\n")
+
+
+def _strip_image_artefacts(markdown):
+    """Remove image references and "missing image" placeholder text.
+
+    This server never asks pymupdf4llm to write or embed image files, so any
+    image link in its output points at a file that does not exist. Those, the
+    picture-text markers, and the Outlook/Word wording a source PDF carries
+    where a picture failed to load are all noise once the Markdown is indexed.
+    See the IMAGES section of the module docstring for the full list."""
+    # 1) Unwrap the picture-text blocks first, so their real text survives.
+    markdown = PICTURE_TEXT_BLOCK_RE.sub(_unwrap_picture_text, markdown)
+
+    # 2) Then remove the artefacts line by line, so a line left holding only
+    #    its bullet or number becomes blank instead of a stray marker. Blank
+    #    lines are absorbed by the blank-run collapsing in _postprocess.
+    out_lines = []
+    for line in markdown.split("\n"):
+        cleaned = IMAGE_ARTEFACT_RE.sub(" ", line)
+        if cleaned == line:
+            out_lines.append(line)
+            continue
+        if not line.lstrip().startswith("|"):
+            remainder = cleaned.strip()
+            if not remainder or ORPHAN_MARKER_RE.match(remainder):
+                out_lines.append("")
+                continue
+        # Close the gap the removal opened. Indentation comes from the original
+        # line so it is never widened into an accidental code block; a table row
+        # keeps its pipes and simply ends up with an empty cell.
+        indent = line[: len(line) - len(line.lstrip())]
+        out_lines.append(
+            (indent + re.sub(r"[ \t]{2,}", " ", cleaned.strip())).rstrip()
+        )
+    return "\n".join(out_lines)
+
+
+def _postprocess(markdown, keep_image_refs=False):
+    """Apply the local fixes on top of pymupdf4llm's output: remove image
+    artefacts, strip trailing whitespace, rejoin orphan list markers, collapse
+    runs of blank lines to a single blank line."""
+    # 0) Drop image references / "missing image" placeholder text.
+    if not keep_image_refs:
+        markdown = _strip_image_artefacts(markdown)
+
+    # 1) Strip trailing whitespace per line.
+    markdown = "\n".join(line.rstrip() for line in markdown.split("\n"))
+
+    # 2) Split into blocks on one-or-more blank lines (tables stay intact,
+    #    since pymupdf4llm emits their rows on consecutive lines).
+    blocks = [b for b in re.split(r"\n[ \t]*\n+", markdown.strip("\n")) if b.strip()]
+
+    # 3) Merge a marker-only block with the (plain) block that follows it.
+    merged = []
+    i = 0
+    n = len(blocks)
+    while i < n:
+        block = blocks[i].strip()
+        if MARKER_ONLY_RE.match(block) and i + 1 < n:
+            nxt = blocks[i + 1].strip()
+            if (
+                not _is_table_block(nxt)
+                and not _is_heading_block(nxt)
+                and not MARKER_ONLY_RE.match(nxt)
+            ):
+                content = " ".join(nxt.split("\n")).strip()
+                merged.append(_normalise_marker(block) + " " + content)
+                i += 2
+                continue
+        merged.append(blocks[i].strip("\n"))
+        i += 1
+
+    # 4) Tidy and reassemble with exactly one blank line between blocks.
+    merged = [_tidy_block(b) for b in merged]
+    markdown = "\n\n".join(merged)
+    markdown = re.sub(r"\n{3,}", "\n\n", markdown)  # 2+ blank lines -> 1
+    return markdown.strip() + "\n"
+
+
+def convert_pdf_to_markdown_text(pdf_path, keep_image_refs=False):
+    """Convert a PDF file to a Markdown string. Raises on failure
+    (file errors, encrypted PDF, parse errors)."""
+    # Light open first, for a clean error on encrypted PDFs.
+    doc = fitz.open(pdf_path)
+    try:
+        if doc.needs_pass:
+            raise ValueError("PDF is password protected")
+    finally:
+        doc.close()
+
+    # Extract with pymupdf4llm (tables + headings + reading order). Suppress
+    # OS-level stdout so its advisory output cannot corrupt the protocol.
+    with _suppress_fd_stdout():
+        raw_markdown = pymupdf4llm.to_markdown(str(pdf_path), table_strategy=TABLE_STRATEGY)
+
+    return _postprocess(raw_markdown, keep_image_refs=keep_image_refs)
+
+
+def convert_one(pdf_path, keep_image_refs=False):
+    """Convert one PDF. Returns (ok, markdown, error_text)."""
+    if fitz is None or pymupdf4llm is None:
+        return (
+            False,
+            "",
+            "Conversion library unavailable: {}\nInterpreter running this server: {}\n"
+            "(If pip says the package is installed but you see this, the package "
+            "is in a different Python than the one above - install into that "
+            "interpreter, or point the MCP client at the interpreter that "
+            "has it.)".format(IMPORT_ERROR, sys.executable),
+        )
+    try:
+        markdown = convert_pdf_to_markdown_text(
+            str(pdf_path), keep_image_refs=keep_image_refs
+        )
+    except FileNotFoundError:
+        return (False, "", "File not found")
+    except PermissionError:
+        return (False, "", "Permission denied reading the PDF")
+    except Exception as exc:  # noqa: BLE001 - report cause to the caller
+        return (False, "", "{}: {}".format(type(exc).__name__, exc))
+
+    if not markdown.strip():
+        return (False, "", "No extractable text (possibly a scanned/image-only PDF needing OCR)")
+    return (True, markdown, "")
+
+
+# --------------------------------------------------------------------------
+# Filesystem helpers
+# --------------------------------------------------------------------------
+def find_pdfs(folder, recursive):
+    """
+    Sorted list of PDF Paths in folder (case-insensitive on suffix).
+    Files that RESOLVE outside the input folder (e.g. a symlink pointing
+    elsewhere) are excluded, so a link dropped into the folder cannot make the
+    server read PDFs beyond it. This also keeps md_output_path's relative_to()
+    mapping safe.
+    """
+    base = Path(folder)
+    base_real = base.resolve()
+    iterator = base.rglob("*") if recursive else base.iterdir()
+    out = []
+    for f in iterator:
+        if not (f.is_file() and f.suffix.lower() == ".pdf"):
+            continue
+        try:
+            f.resolve().relative_to(base_real)
+        except ValueError:
+            log("Excluded (resolves outside the input folder): {}".format(f))
+            continue
+        out.append(f)
+    return sorted(out)
+
+
+def md_output_path(pdf_path, docs_dir, output_dir):
+    """Map an input PDF to its .md path in the output folder, preserving any
+    sub-folder structure (relevant when PDF2MD_RECURSIVE=1)."""
+    rel = Path(pdf_path).resolve().relative_to(Path(docs_dir).resolve())
+    return Path(output_dir) / rel.with_suffix(".md")
+
+
+def write_markdown(markdown, out_path):
+    """Write Markdown to out_path (creating parent folders). newline='' keeps
+    the bytes faithful (no CRLF rewriting); UTF-8 preserves non-ASCII."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", encoding="utf-8", newline="") as fh:
+        fh.write(markdown)
+
+
+def format_file_list(paths, limit=25):
+    names = [p.name for p in paths[:limit]]
+    extra = len(paths) - len(names)
+    listing = "\n".join("  - {}".format(n) for n in names)
+    if extra > 0:
+        listing += "\n  ... and {} more".format(extra)
+    return listing
+
+
+# --------------------------------------------------------------------------
+# Fuzzy matching (single-file tool)
+# --------------------------------------------------------------------------
+def normalise(text):
+    text = text.lower()
+    for ch in ("_", "-", ".", "(", ")", "[", "]", ",", "&", "+"):
+        text = text.replace(ch, " ")
+    return " ".join(text.split())
+
+
+def score_name(query_norm, name_norm):
+    q_tokens = query_norm.split()
+    n_tokens = set(name_norm.split())
+    contained = (sum(1 for t in q_tokens if t in n_tokens) / len(q_tokens)) if q_tokens else 0.0
+    ratio = difflib.SequenceMatcher(None, query_norm, name_norm).ratio()
+    return (contained, ratio)
+
+
+def match_pdfs(query, pdfs):
+    query_norm = normalise(query)
+    scored = [(p, score_name(query_norm, normalise(p.stem))) for p in pdfs]
+    scored.sort(key=lambda item: item[1], reverse=True)
+    return scored
+
+
+# --------------------------------------------------------------------------
+# Tool implementations
+# --------------------------------------------------------------------------
+def do_convert_all(config, force=False):
+    """Batch convert. Returns (text, is_error)."""
+    docs_dir = config["docs_dir"]
+    output_dir = config["output_dir"]
+    recursive = config["recursive"]
+    keep_image_refs = config["keep_image_refs"]
+
+    if not os.path.isdir(docs_dir):
+        return ("Configured input folder does not exist: {}".format(docs_dir), True)
+
+    try:
+        pdfs = find_pdfs(docs_dir, recursive)
+    except OSError as exc:
+        return ("Could not read input folder {}: {}".format(docs_dir, exc), True)
+
+    if not pdfs:
+        return ("No PDF files found in {}.".format(docs_dir), True)
+
+    converted, skipped, failed = [], [], []
+    for pdf in pdfs:
+        out_path = md_output_path(pdf, docs_dir, output_dir)
+        if out_path.exists() and not force:
+            skipped.append(pdf.name)
+            continue
+        ok, markdown, err = convert_one(pdf, keep_image_refs=keep_image_refs)
+        if not ok:
+            failed.append((pdf.name, err))
+            continue
+        try:
+            write_markdown(markdown, out_path)
+        except OSError as exc:
+            failed.append((pdf.name, "write failed: {}".format(exc)))
+            continue
+        converted.append(pdf.name)
+
+    parts = [
+        "Batch conversion of {} PDF(s) in {}".format(len(pdfs), docs_dir),
+        "Output folder: {}".format(output_dir),
+        "",
+        "Converted: {}".format(len(converted)),
+    ]
+    for name in converted:
+        parts.append("  + {}".format(name))
+    parts.append("Skipped (already have .md): {}".format(len(skipped)))
+    if skipped:
+        parts.append("  ({})".format(", ".join(skipped) if len(skipped) <= 20
+                                      else "{} files".format(len(skipped))))
+    parts.append("Failed: {}".format(len(failed)))
+    for name, reason in failed:
+        parts.append("  ! {}: {}".format(name, reason))
+
+    # Only an error if nothing converted AND nothing deliberately skipped.
+    is_error = (not converted) and bool(failed) and (not skipped)
+    return ("\n".join(parts), is_error)
+
+
+def do_convert_one_fuzzy(query, config):
+    """Single fuzzy convert. Returns (text, is_error)."""
+    docs_dir = config["docs_dir"]
+    output_dir = config["output_dir"]
+    recursive = config["recursive"]
+    keep_image_refs = config["keep_image_refs"]
+
+    if not os.path.isdir(docs_dir):
+        return ("Configured input folder does not exist: {}".format(docs_dir), True)
+
+    try:
+        pdfs = find_pdfs(docs_dir, recursive)
+    except OSError as exc:
+        return ("Could not read input folder {}: {}".format(docs_dir, exc), True)
+
+    if not pdfs:
+        return ("No PDF files found in {}.".format(docs_dir), True)
+
+    ranked = match_pdfs(query, pdfs)
+    best_path, (best_contained, best_ratio) = ranked[0]
+
+    if best_contained == 0.0 and best_ratio < MIN_RATIO:
+        return (
+            "No PDF closely matching '{}' was found in {}.\nAvailable PDFs:\n{}".format(
+                query, docs_dir, format_file_list(pdfs)
+            ),
+            True,
+        )
+
+    tied = []
+    for path, (contained, ratio) in ranked:
+        if contained == best_contained and (best_ratio - ratio) <= AMBIGUITY_DELTA:
+            tied.append(path)
+        else:
+            break
+    if len(tied) > 1:
+        return (
+            "'{}' matches several PDFs about equally well. Please be more "
+            "specific. Candidates:\n{}".format(query, format_file_list(tied)),
+            True,
+        )
+
+    log("Converting (fuzzy): {}".format(best_path))
+    ok, markdown, err = convert_one(best_path, keep_image_refs=keep_image_refs)
+    if not ok:
+        return ("Failed to convert '{}': {}".format(best_path.name, err), True)
+
+    out_path = md_output_path(best_path, docs_dir, output_dir)
+    try:
+        write_markdown(markdown, out_path)
+    except OSError as exc:
+        return ("Converted OK but could not write output {}: {}".format(out_path, exc), True)
+
+    total = len(markdown)
+    if total > MAX_INLINE_CHARS:
+        preview = markdown[:MAX_INLINE_CHARS]
+        note = "\n\n... [preview truncated: first {} of {} characters; full Markdown is in the file above]".format(
+            MAX_INLINE_CHARS, total
+        )
+    else:
+        preview = markdown
+        note = ""
+
+    header = (
+        "Converted '{name}' to Markdown.\nSource: {src}\n"
+        "Markdown written to: {out} ({n} characters)\n\n--- Markdown ---\n".format(
+            name=best_path.name, src=best_path, out=out_path, n=total
+        )
+    )
+    return (header + preview + note, False)
+
+
+# --------------------------------------------------------------------------
+# JSON-RPC plumbing
+# --------------------------------------------------------------------------
+TOOLS = [
+    {
+        "name": "convert_all_pdfs",
+        "description": (
+            "Convert every PDF in the configured input folder to Markdown, "
+            "writing .md files into the configured output folder. PDFs that "
+            "already have a matching .md in the output folder are skipped. "
+            "Use this for requests like 'convert all pdfs to markdown'. Set "
+            "force=true to reconvert even when the .md already exists."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "force": {
+                    "type": "boolean",
+                    "description": "Reconvert PDFs even if their .md already exists. Default false.",
+                }
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "convert_pdf_to_markdown",
+        "description": (
+            "Convert a single PDF, identified by a rough or approximate name, "
+            "to Markdown. Example query: 'procurement policy'. The .md is "
+            "written to the configured output folder. If several PDFs match "
+            "equally well, it lists them and asks for a more specific name."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Rough name/keywords of the PDF, e.g. 'procurement policy'.",
+                }
+            },
+            "required": ["query"],
+        },
+    },
+]
+
+
+def make_result(msg_id, result):
+    return {"jsonrpc": "2.0", "id": msg_id, "result": result}
+
+
+def make_error(msg_id, code, message):
+    return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": code, "message": message}}
+
+
+def send(message):
+    sys.stdout.write(json.dumps(message, ensure_ascii=True) + "\n")
+    sys.stdout.flush()
+
+
+def handle_initialize(params):
+    client_version = params.get("protocolVersion") or DEFAULT_PROTOCOL_VERSION
+    return {
+        "protocolVersion": client_version,
+        "capabilities": {"tools": {}},
+        "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
+    }
+
+
+def handle_tools_call(params, config):
+    name = params.get("name")
+    arguments = params.get("arguments") or {}
+
+    if name == "convert_all_pdfs":
+        force = bool(arguments.get("force", False))
+        text, is_error = do_convert_all(config, force=force)
+    elif name == "convert_pdf_to_markdown":
+        query = arguments.get("query")
+        if not query or not str(query).strip():
+            return {
+                "content": [{"type": "text", "text": "Please provide a 'query' (a rough PDF name)."}],
+                "isError": True,
+            }
+        text, is_error = do_convert_one_fuzzy(str(query).strip(), config)
+    else:
+        return {
+            "content": [{"type": "text", "text": "Unknown tool: {}".format(name)}],
+            "isError": True,
+        }
+
+    return {"content": [{"type": "text", "text": text}], "isError": is_error}
+
+
+def handle_message(msg, config):
+    if not isinstance(msg, dict):
+        return
+    method = msg.get("method")
+    msg_id = msg.get("id")
+    is_notification = "id" not in msg
+    if method is None:
+        return
+
+    try:
+        if method == "initialize":
+            if not is_notification:
+                send(make_result(msg_id, handle_initialize(msg.get("params") or {})))
+        elif method == "tools/list":
+            if not is_notification:
+                send(make_result(msg_id, {"tools": TOOLS}))
+        elif method == "tools/call":
+            result = handle_tools_call(msg.get("params") or {}, config)
+            if not is_notification:
+                send(make_result(msg_id, result))
+        elif method == "ping":
+            if not is_notification:
+                send(make_result(msg_id, {}))
+        elif method.startswith("notifications/"):
+            pass
+        else:
+            if not is_notification:
+                send(make_error(msg_id, -32601, "Method not found: {}".format(method)))
+    except Exception as exc:  # noqa: BLE001 - keep the loop alive
+        log("Error handling '{}': {}".format(method, traceback.format_exc()))
+        if not is_notification:
+            send(make_error(msg_id, -32603, "Internal error: {}".format(exc)))
+
+
+def env(name):
+    """Read an environment variable, treating blank as unset.
+
+    A blank value is what an MCP client substitutes for a setting the user left
+    empty, and an unexpanded "${...}" placeholder is what it leaves behind when
+    the variable it refers to does not exist. Both mean "not configured", so
+    the CONFIG default still applies.
+    """
+    value = (os.environ.get(name) or "").strip()
+    if not value or (value.startswith("${") and value.endswith("}")):
+        return None
+    return value
+
+
+def env_flag(name, default=False):
+    """Boolean environment variable; blank or unset keeps the default."""
+    value = env(name)
+    if value is None:
+        return default
+    return value.lower() in ("1", "true", "yes", "on")
+
+
+def folder(own_var, root_var, root_default):
+    """Resolve one of this server's folders from the environment.
+
+    Precedence: this server's own override variable, then the suite-wide root
+    variable, then the root default from the CONFIG block - with this server's
+    "pdf" sub-folder appended to either root. Returns
+    (path, user_configured); user_configured is False only when nothing was
+    set at all, which decides how a missing folder is reported.
+    """
+    own = env(own_var)
+    if own:
+        return own, True
+    root = env(root_var)
+    if root:
+        return os.path.join(root, SUBFOLDER), True
+    return os.path.join(root_default, SUBFOLDER), False
+
+
+def parse_args(argv):
+    parser = argparse.ArgumentParser(
+        description="Self-contained MCP stdio server: convert PDFs in a folder "
+                    "to Markdown (with tables). Configuration is environment "
+                    "variables only: EVA_DOCUMENTS_DIR and EVA_KNOWLEDGE_DIR "
+                    "(this server uses the 'pdf' sub-folder of each). See the "
+                    "CONFIGURATION section of this file's docstring."
+    )
+    parser.add_argument("--check", action="store_true",
+                        help="Print environment/config diagnostics (interpreter, "
+                             "folders, dependency status, PDFs found), then exit "
+                             "without starting the server.")
+    parser.add_argument("--version", action="version",
+                        version="{0} {1}".format(SERVER_NAME, __version__))
+    args = parser.parse_args(argv)
+    # Folders and behaviour flags come from the environment, and are attached
+    # to the parsed args so the rest of the file keeps one config object.
+    args.docs_dir, args.docs_chosen = folder(
+        "PDF2MD_DOCS_DIR", "EVA_DOCUMENTS_DIR", EVA_DOCUMENTS_DIR)
+    args.output_dir, args.output_chosen = folder(
+        "PDF2MD_KB_DIR", "EVA_KNOWLEDGE_DIR", EVA_KNOWLEDGE_DIR)
+    args.recursive = env_flag("PDF2MD_RECURSIVE")
+    args.keep_image_refs = env_flag("PDF2MD_KEEP_IMAGE_REFS", KEEP_IMAGE_REFS)
+    return args
+
+
+def _folder_source(chosen, docs):
+    """Where a resolved folder came from, for --check output."""
+    if chosen:
+        return "PDF2MD_{0}_DIR / EVA_{1}_DIR".format(
+            "DOCS" if docs else "KB", "DOCUMENTS" if docs else "KNOWLEDGE")
+    return "built-in default (no EVA_{0}_DIR set)".format(
+        "DOCUMENTS" if docs else "KNOWLEDGE")
+
+
+def run_check(args):
+    """--check: report interpreter, config and dependency state, then exit."""
+    print("{0} environment check".format(SERVER_NAME))
+    print("  version           : {0}".format(__version__))
+    print("  python executable : {0}".format(sys.executable))
+    print("  python version    : {0}".format(sys.version.split()[0]))
+    print("  docs dir          : {0}".format(args.docs_dir))
+    print("  docs dir from     : {0}".format(_folder_source(args.docs_chosen, True)))
+    print("  docs dir exists   : {0}".format(os.path.isdir(args.docs_dir)))
+    print("  output dir        : {0}".format(args.output_dir))
+    print("  output dir from   : {0}".format(_folder_source(args.output_chosen, False)))
+    print("  output dir exists : {0}".format(os.path.isdir(args.output_dir)))
+    print("  recursive         : {0}".format(args.recursive))
+    print("  keep image refs   : {0}".format(args.keep_image_refs))
+    print("  dependencies      : {0}".format(
+        "OK (pymupdf + pymupdf4llm importable)" if IMPORT_ERROR is None else IMPORT_ERROR))
+    if args.docs_dir and os.path.isdir(args.docs_dir):
+        try:
+            pdfs = find_pdfs(args.docs_dir, args.recursive)
+            print("  PDFs found        : {0}".format(len(pdfs)))
+        except Exception as exc:  # noqa: BLE001 - diagnostics only
+            print("  PDFs found        : error listing ({0})".format(exc))
+    return 0
+
+
+def main(argv=None):
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+
+    if args.check:
+        return run_check(args)
+
+    # Reserve stdout strictly for JSON-RPC; newline='\n' stops Windows CRLF
+    # rewriting that would corrupt the line-delimited protocol.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", newline="\n")
+        sys.stdin.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
+    config = {
+        "docs_dir": args.docs_dir,
+        "output_dir": args.output_dir,
+        "recursive": args.recursive,
+        "keep_image_refs": args.keep_image_refs,
+    }
+    log("interpreter (sys.executable): {}".format(sys.executable))
+    log("started (docs_dir={!r}, output_dir={!r}, recursive={}, "
+        "keep_image_refs={})".format(
+            args.docs_dir, args.output_dir, args.recursive, args.keep_image_refs))
+    if fitz is None or pymupdf4llm is None:
+        log("WARNING: {}".format(IMPORT_ERROR))
+        log("WARNING: the package is missing from the interpreter above. "
+            "Install it into THIS interpreter (\"{}\" -m pip install pymupdf pymupdf4llm) "
+            "or point the MCP client at the interpreter that has it.".format(sys.executable))
+
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except json.JSONDecodeError as exc:
+            log("Ignoring non-JSON line: {}".format(exc))
+            continue
+        handle_message(msg, config)
+
+    log("stdin closed, exiting.")
+
+
+if __name__ == "__main__":
+    main()

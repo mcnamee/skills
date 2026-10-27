@@ -1,0 +1,28 @@
+{
+  "name": "pdf-to-md",
+  "displayName": "PDF to Markdown",
+  "version": "7.0.1",
+  "description": "Convert PDFs to Markdown with tables preserved, for feeding a local knowledge base. Requires pymupdf.",
+  "author": {
+    "name": "mcnamee"
+  },
+  "repository": "https://github.com/mcnamee/agent-skills",
+  "license": "MIT",
+  "keywords": [
+    "pdf",
+    "markdown",
+    "convert"
+  ],
+  "mcpServers": {
+    "pdf2md": {
+      "type": "stdio",
+      "command": "${EVA_PYTHON}",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/pdf-to-md.py"
+      ],
+      "env": {
+        "PYTHONUTF8": "1"
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "knowledge-base",
+  "displayName": "Knowledge base (RAG)",
+  "version": "6.0.1",
+  "description": "True RAG over your own Markdown docs: a local ChromaDB vector index plus your embeddings API. Captures new notes back into it. Requires chromadb.",
+  "author": {
+    "name": "mcnamee"
+  },
+  "repository": "https://github.com/mcnamee/agent-skills",
+  "license": "MIT",
+  "keywords": [
+    "rag",
+    "knowledge-base",
+    "search",
+    "embeddings"
+  ],
+  "mcpServers": {
+    "knowledge-base": {
+      "type": "stdio",
+      "command": "${EVA_PYTHON}",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/knowledge-base.py"
+      ],
+      "env": {
+        "PYTHONUTF8": "1"
+      }
+    }
+  }
+}

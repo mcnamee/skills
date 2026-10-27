@@ -1,0 +1,288 @@
+{
+  // OpenCode config TEMPLATE for the Eva suite. Copy it once to
+  // H:\Eva\opencode.json and fill it in there:
+  //
+  //     Copy-Item H:\Eva\opencode.example.jsonc H:\Eva\opencode.json
+  //
+  // OpenCode reads H:\Eva\opencode.json whenever it (or its VS Code extension)
+  // is opened in H:\Eva. Copying the repo's eva\ folder again only replaces
+  // this template, never your filled-in opencode.json. Setup: OPENCODE.md at
+  // the repo root.
+  //
+  // Everything is configured in this one file - no environment variables.
+  //   - Paths: find-and-replace C:/path/to/python.exe with your python.exe,
+  //     and H:/Agent-Skills with your clone if it lives elsewhere. Write
+  //     paths with forward slashes (C:/Python312/python.exe); a backslash must
+  //     be doubled (C:\\Python312\\python.exe), because this is JSON.
+  //   - Settings: fill in the "environment" block of each server you use.
+  //     A blank value means "not set", so the server's default applies.
+  //   - A value here BEATS a Windows environment variable of the same name,
+  //     blank included. To use a Windows variable instead, delete the line.
+  "$schema": "https://opencode.ai/config.json",
+
+  // Eva's operating instructions (OpenCode would also find CLAUDE.md on its
+  // own; naming it keeps that from depending on a compatibility fallback).
+  "instructions": ["CLAUDE.md"],
+
+  // Never publish a session to opencode.ai, and never self-update.
+  "share": "disabled",
+  "autoupdate": false,
+
+  // Default provider: Anthropic. Uncomment apiKey and fill it in, or leave it
+  // commented and run /connect once inside OpenCode. Only this provider is
+  // offered. To use a corporate gateway, uncomment baseURL. To use a different
+  // provider, change enabled_providers, provider and both model lines together.
+  "enabled_providers": ["anthropic"],
+  "model": "anthropic/claude-sonnet-5",
+  "small_model": "anthropic/claude-haiku-4-5",
+  "provider": {
+    "anthropic": {
+      "options": {
+        // "apiKey": "your-api-key",
+        // "baseURL": "https://your-gateway.example/v1"
+      }
+    }
+  },
+
+  // Every skill. The first path is the plugin skills, read straight from your
+  // clone, so a `git pull` is all it takes to update them. The second is the
+  // standalone skills (brief-writer, email-writer, exemplar-writer, polish,
+  // unslop), which arrive with the eva folder. OpenCode also looks in
+  // .claude\skills of the folder it is opened in, but naming the folder here
+  // means they load wherever you start it. These add to OpenCode's usual skill
+  // folders (~/.claude/skills, ~/.config/opencode/skills) rather than
+  // replacing them.
+  "skills": {
+    "paths": ["H:/Agent-Skills/plugins", "H:/Eva/.claude/skills"]
+  },
+
+  // One entry per plugin, named as in Claude Code so the tool names match.
+  // Set "enabled": false for any plugin you have not installed the pip
+  // dependencies for. "timeout" (ms) covers start-up and every tool call;
+  // OpenCode's 5-second default is too short for these servers.
+  //
+  // Each "environment" block lists EVERY variable that server reads, blank, in
+  // three groups: its main settings, optional tuning, and folder overrides.
+  // Fill in only what you need. Folders default to their place in H:\Eva, so
+  // the overrides are for an endpoint whose layout differs, e.g.
+  // "MSWORD_DOCS_DIR": "D:/Work/Word". What each variable accepts is in the
+  // plugin's README.
+  "mcp": {
+    "word": {
+      "type": "local",
+      "command": ["C:/path/to/python.exe", "H:/Agent-Skills/plugins/word/word.py"],
+      "environment": {
+        "PYTHONUTF8": "1",
+        // Name stamped on Word tracked changes, e.g. your own name.
+        "MSWORD_AUTHOR": "",
+        // Folder overrides (default H:/Eva/documents/word, templates/word,
+        // knowledge/word). MSWORD_KB_DIR also takes "off".
+        "MSWORD_DOCS_DIR": "",
+        "MSWORD_TEMPLATES_DIR": "",
+        "MSWORD_KB_DIR": ""
+      },
+      "enabled": true,
+      "timeout": 300000
+    },
+    "powerpoint": {
+      "type": "local",
+      "command": ["C:/path/to/python.exe", "H:/Agent-Skills/plugins/powerpoint/powerpoint.py"],
+      "environment": {
+        "PYTHONUTF8": "1",
+        // Folder overrides (default H:/Eva/documents/powerpoint,
+        // templates/powerpoint, knowledge/powerpoint). POWERPOINT_KB_DIR also
+        // takes "off".
+        "POWERPOINT_DOCS_DIR": "",
+        "POWERPOINT_TEMPLATES_DIR": "",
+        "POWERPOINT_KB_DIR": ""
+      },
+      "enabled": true,
+      "timeout": 300000
+    },
+    "excel": {
+      "type": "local",
+      "command": ["C:/path/to/python.exe", "H:/Agent-Skills/plugins/excel/excel.py"],
+      "environment": {
+        "PYTHONUTF8": "1",
+        // Folder override (default H:/Eva/documents/excel).
+        "EXCEL_DOCS_DIR": ""
+      },
+      "enabled": true,
+      "timeout": 300000
+    },
+    "outlook": {
+      "type": "local",
+      "command": ["C:/path/to/python.exe", "H:/Agent-Skills/plugins/outlook/outlook.py"],
+      // Each of these is optional; what they accept is in plugins/outlook/README.md.
+      "environment": {
+        "PYTHONUTF8": "1",
+        "OUTLOOK_SEARCH_FOLDERS": "",
+        "OUTLOOK_BLACKLIST_FILE": "",
+        "OUTLOOK_CALENDAR_HOURS": "",
+        "OUTLOOK_CALENDAR_PAGE_FILL": "",
+        "OUTLOOK_CALENDAR_COLOURS": "",
+        "OUTLOOK_CALENDAR_HIDE_CATEGORIES": "",
+        "OUTLOOK_CALENDAR_TEAM": "",
+        "OUTLOOK_EWS_URL": "",
+        "OUTLOOK_TASKS_TEAM": "",
+        "OUTLOOK_TASKS_PAGE": "",
+        "OUTLOOK_MEETING_HOURS": "",
+        "OUTLOOK_ALLOW_DRAFTS": "",
+        "OUTLOOK_GAL_SCAN_CAP": "",
+        // Tuning: "1" refuses to start without a blacklist file; "true" saves
+        // every email read to the knowledge base, not just the ones you ask for;
+        // "false" reads the calendar the old, slow way (only if --check says to).
+        "OUTLOOK_REQUIRE_BLACKLIST": "",
+        "OUTLOOK_KB_AUTOSAVE": "",
+        "OUTLOOK_CALENDAR_PREFILTER": "",
+        // TLS to Exchange (meeting free/busy and the team view): an internal CA, or "false" to
+        // switch verification off.
+        "OUTLOOK_CA_CERT": "",
+        "OUTLOOK_VERIFY_SSL": "",
+        // Folder overrides (default H:/Eva/knowledge/email for saved email,
+        // H:/Eva/documents/pdf for printed planners). Both also take "off".
+        "OUTLOOK_KB_DIR": "",
+        "OUTLOOK_DOCS_DIR": ""
+      },
+      "enabled": true,
+      "timeout": 300000
+    },
+    "confluence": {
+      "type": "local",
+      "command": ["C:/path/to/python.exe", "H:/Agent-Skills/plugins/confluence/confluence.py"],
+      // BASE_URL and TOKEN (or USER + PASSWORD) are required; the _2 lines add
+      // a second instance. The rest are optional - see
+      // plugins/confluence/README.md.
+      "environment": {
+        "PYTHONUTF8": "1",
+        "CONFLUENCE_NAME": "",
+        "CONFLUENCE_BASE_URL": "",
+        "CONFLUENCE_TOKEN": "",
+        "CONFLUENCE_USER": "",
+        "CONFLUENCE_PASSWORD": "",
+        "CONFLUENCE_CA_CERT": "",
+        "CONFLUENCE_VERIFY_SSL": "",
+        // Second instance (leave all blank for one).
+        "CONFLUENCE_NAME_2": "",
+        "CONFLUENCE_BASE_URL_2": "",
+        "CONFLUENCE_TOKEN_2": "",
+        "CONFLUENCE_USER_2": "",
+        "CONFLUENCE_PASSWORD_2": "",
+        "CONFLUENCE_CA_CERT_2": "",
+        "CONFLUENCE_VERIFY_SSL_2": "",
+        // "true" lets it create, update and append to pages. Blank = read-only.
+        "CONFLUENCE_ALLOW_WRITE": "",
+        // Tuning.
+        "CONFLUENCE_KB_AUTOSAVE": "",
+        "CONFLUENCE_BODY_FORMAT": "",
+        "CONFLUENCE_TIMEOUT": "",
+        "CONFLUENCE_MAX_BODY": "",
+        // Folder overrides: saved pages and .md attachments (default
+        // H:/Eva/knowledge/confluence), and the documents ROOT other
+        // attachments download into by type (default H:/Eva/documents, so
+        // documents/excel, documents/word, ...). Both also take "off".
+        "CONFLUENCE_KB_DIR": "",
+        "CONFLUENCE_DOCS_DIR": ""
+      },
+      "enabled": true,
+      "timeout": 300000
+    },
+    "jira": {
+      "type": "local",
+      "command": ["C:/path/to/python.exe", "H:/Agent-Skills/plugins/jira/jira.py"],
+      // BASE_URL and TOKEN (or USER + PASSWORD) are required; PROJECTS is an
+      // optional allowlist. The rest are optional - see plugins/jira/README.md.
+      "environment": {
+        "PYTHONUTF8": "1",
+        "JIRA_BASE_URL": "",
+        "JIRA_PROJECTS": "",
+        "JIRA_TOKEN": "",
+        "JIRA_USER": "",
+        "JIRA_PASSWORD": "",
+        "JIRA_CA_CERT": "",
+        "JIRA_VERIFY_SSL": "",
+        // "true" lets it create, edit, comment on and transition issues.
+        // Blank = read-only.
+        "JIRA_ALLOW_WRITE": "",
+        // Tuning. JIRA_EXTRA_FIELDS: custom fields jira_get_issue shows,
+        // by id or name, e.g. "customfield_10010,Story Points".
+        "JIRA_TIMEOUT": "",
+        "JIRA_MAX_BODY": "",
+        "JIRA_EXTRA_FIELDS": "",
+        // Jira Plans target date field ids - only if --check can't find them.
+        "JIRA_TARGET_START_FIELD": "",
+        "JIRA_TARGET_END_FIELD": ""
+      },
+      "enabled": true,
+      "timeout": 300000
+    },
+    "knowledge-base": {
+      "type": "local",
+      "command": ["C:/path/to/python.exe", "H:/Agent-Skills/plugins/knowledge-base/knowledge-base.py"],
+      // Your embeddings endpoint (KB_EMBED_URL is required). Everything after
+      // the first three is optional - see plugins/knowledge-base/README.md.
+      "environment": {
+        "PYTHONUTF8": "1",
+        "KB_EMBED_URL": "",
+        "KB_EMBED_MODEL": "",
+        "KB_EMBED_API_KEY": "",
+        // Matching an unusual embeddings endpoint.
+        "KB_EMBED_AUTH_HEADER": "",
+        "KB_EMBED_STYLE": "",
+        "KB_EMBED_TENSOR_NAME": "",
+        "KB_EMBED_JSON_KEY": "",
+        "KB_EMBED_TEMPLATE": "",
+        "KB_EMBED_RESPONSE_PATH": "",
+        "KB_EMBED_BATCH": "",
+        "KB_EMBED_QUERY_PREFIX": "",
+        "KB_EMBED_DOC_PREFIX": "",
+        "KB_EMBED_EXTRA_HEADERS": "",
+        // Optional chat endpoint, for the generate step of kb_ask.
+        "KB_CHAT_URL": "",
+        "KB_CHAT_MODEL": "",
+        "KB_CHAT_API_KEY": "",
+        "KB_CHAT_AUTH_HEADER": "",
+        "KB_CHAT_MAX_TOKENS": "",
+        "KB_CHAT_EXTRA_HEADERS": "",
+        // TLS: an internal CA, a client certificate (mTLS), or "false" to
+        // switch verification off.
+        "KB_CA_CERT": "",
+        "KB_CLIENT_CERT": "",
+        "KB_CLIENT_KEY": "",
+        "KB_CLIENT_KEY_PASSWORD": "",
+        "KB_VERIFY_SSL": "",
+        // Tuning.
+        "KB_COLLECTION": "",
+        "KB_TIMEOUT": "",
+        "KB_CHUNK_CHARS": "",
+        "KB_CHUNK_OVERLAP": "",
+        "KB_TOP_K": "",
+        "KB_DEBUG": "",
+        // Folder overrides (default: the corpus is H:/Eva/knowledge, the index
+        // H:/Eva/index, captures H:/Eva/knowledge/captures).
+        "KB_DOCS_DIR": "",
+        "KB_INDEX_DIR": "",
+        "KB_OUTPUT_DIR": ""
+      },
+      "enabled": true,
+      // Longer: a first kb_index over a large corpus can run for minutes.
+      "timeout": 900000
+    },
+    "pdf2md": {
+      "type": "local",
+      "command": ["C:/path/to/python.exe", "H:/Agent-Skills/plugins/pdf-to-md/pdf-to-md.py"],
+      "environment": {
+        "PYTHONUTF8": "1",
+        // Tuning: "1" converts PDFs in sub-folders too; "1" keeps image
+        // references in the Markdown.
+        "PDF2MD_RECURSIVE": "",
+        "PDF2MD_KEEP_IMAGE_REFS": "",
+        // Folder overrides (default H:/Eva/documents/pdf, knowledge/pdf).
+        "PDF2MD_DOCS_DIR": "",
+        "PDF2MD_KB_DIR": ""
+      },
+      "enabled": true,
+      "timeout": 300000
+    }
+  }
+}

@@ -1,0 +1,201 @@
+---
+name: word
+description: Read, edit and create Word .docx files via the msword MCP server, including Word tracked changes, native Word styles (real bullet/numbered lists and headings), editing tables (set cells, add/delete rows), and creating documents from a template — including filling out an example template (placeholders + example tables). Use when the user asks to open/summarise/search a Word document, edit or redline one with tracked changes, accept/reject revisions, add bullet points or headings, fill in or edit tables, or draft a new .docx (optionally from a template).
+---
+
+# Word (via the `word` MCP server)
+
+Requires the `word.py` MCP server (the only write-capable server in the
+suite; sandboxed to its configured docs folder). If its tools are not
+available, tell the user to wire it in first (see the repo README) and to
+verify with `python word.py --check`.
+
+## Core workflow: open → edit → save
+
+1. Find the file: `msword_list_documents` (optional `query` substring) if
+   the exact name is unknown. Bare names resolve against the docs folder —
+   `msword_open` with `path: "Policy 103.docx"` works without a full path.
+2. `msword_open` returns a `session_id`; every later call needs it.
+3. Read with `msword_get_content` / `msword_search` / `msword_get_tables`.
+4. Edit with `msword_replace_text`, `msword_set_paragraph_text`,
+   `msword_insert_paragraph`, `msword_delete_paragraph`; **add** new content
+   with `msword_add_content` (see the next section).
+5. Persist with `msword_save` (omit `path` to save in place).
+
+## Hard rule: write content with ONE `msword_add_content` call
+
+`msword_add_heading`, `msword_add_paragraph` and `msword_add_table` each append
+their block to the **end** of the document, so the document's order is the order
+the *calls arrive at the server*. Independent tool calls issued together may be
+dispatched in parallel, and then they need not arrive in the order you wrote
+them — which is how a document ends up with all its headings bunched together
+and all the body text after them.
+
+So, for **anything longer than a single block**, send one `msword_add_content`
+call with the whole sequence in `blocks`, in document order:
+
+```json
+{"session_id": "abc123", "blocks": [
+  {"type": "heading",   "text": "Overview", "level": 1},
+  {"type": "paragraph", "text": "Revenue grew 8% on the prior quarter."},
+  {"type": "bullet",    "text": "Widgets led the growth"},
+  {"type": "bullet",    "text": "Services were flat"},
+  {"type": "table",     "data": [["Item", "Cost"], ["Widget", "5"]]},
+  {"type": "page_break"},
+  {"type": "heading",   "text": "Appendix", "level": 1}
+]}
+```
+
+- Block types: `heading` (with `level`: 0 = Title, 1–9 = Heading 1–9), `title`,
+  `paragraph`, `bullet`, `number`, `table` (`data`, or `rows`+`cols`),
+  `page_break`. A plain string is a paragraph. `bullet`/`number` pick up
+  whatever list style **this** document defines — pass `style` to force one.
+- **One block per list item.** No newlines inside a block's `text`.
+- More content than fits one call? Send consecutive calls — each appends after
+  the last, so the order still holds. Never split one section across parallel
+  calls.
+- The whole list is validated before anything is written, so a rejected batch
+  leaves the document untouched and the error names the block index.
+- `track_changes: true` records each added paragraph/heading as a real tracked
+  insertion (tables can't be tracked).
+- Keep `msword_add_heading` / `msword_add_paragraph` / `msword_add_table` for a
+  genuinely single block added on its own. If a result comes back with an
+  `order_warning`, the server spotted a burst of single appends: check the
+  document with `msword_get_content` (`mode: "structured"`) and rebuild it with
+  `msword_add_content`.
+- Never fire several `msword_insert_paragraph` calls at once either: each insert
+  shifts every later `para_index`, so they must go one at a time.
+
+## Hard rule: use native Word styles, never typed markup
+
+Word documents carry structure in paragraph **styles**, not in characters.
+Type the text only, and let the style supply the bullet, the number and the
+heading.
+
+- **Never** type `- `, `* `, `• ` or `1. ` at the start of a paragraph's
+  `text`. Use a `bullet`/`number` block (or `style: "List Bullet"` /
+  `"List Number"`) instead, **one block per item** (no newlines inside one
+  paragraph).
+- Headings are `heading` blocks (`level` 0 = Title, 1–9 = Heading 1–9), never
+  bold body text. Nested list levels are `List Bullet 2`/`3`,
+  `List Number 2`/`3`. Other built-ins: `Normal`, `Quote`, `Intense Quote`.
+- **Discover before you style** a document you did not create:
+  `msword_list_styles` lists every style the document actually defines, flags
+  which are bullets/numbers/headings, and its `recommended` block names the
+  right style for *this* template — which may be something like
+  `DSCO Bullet`, not `List Bullet`. Call it whenever a style name is rejected;
+  the error lists the nearest real names.
+- The server catches typed markers — it strips the `- ` and applies the list
+  style, and says so in the result's `warning`. Don't rely on it: it can't fix
+  a document with no list style, it never restyles inside table cells or during
+  tracked changes, and a multi-item block in one call is refused. Pass
+  `literal_text: true` for text that really must start with a marker
+  (`- 5 degrees`).
+- `msword_insert_paragraph` with no `style` now follows Word's Enter-key rule
+  (after a `List Bullet` item you get another one); pass `style` to override.
+- Tables get `Table Grid` (visible borders) by default; pass
+  `style: "Normal Table"` for a borderless one.
+- **Why it matters beyond looks:** the Markdown/knowledge-base export is driven
+  entirely by style, so a hand-typed `- item` is mirrored into the RAG index as
+  an ordinary paragraph and the list structure is lost — along with Word's
+  navigation pane, any table of contents, and the ability to restyle from the
+  template.
+
+## Tracked changes (redlining)
+
+- Pass `track_changes=true` on the editing tools to record edits as real
+  Word revisions (word-by-word diff, author-stamped) that the user can
+  Accept/Reject in Word. Prefer this whenever the user says "redline",
+  "tracked changes", "for review", or edits someone else's document.
+- Review flow: `msword_list_changes` → `msword_accept_changes` /
+  `msword_reject_changes` (by id), or `msword_accept_all_changes` /
+  `msword_reject_all_changes`.
+- While changes are pending, content/search show the final "No Markup" view —
+  and editing tools now work against that same view, so you can redline a
+  paragraph that already has pending changes (including re-editing your own
+  earlier insertion) and get the revision you asked for.
+- An **untracked** `msword_set_paragraph_text` on a paragraph that has pending
+  changes is refused, because it would silently destroy them — possibly a
+  reviewer's. Accept/reject first, or pass `track_changes=true`.
+- Style changes are never tracked revisions (Word formatting-only revisions
+  aren't supported), so restyle before redlining, not during.
+
+## Creating documents
+
+`msword_create` makes a new .docx in the configured **documents folder** — the
+same one your existing documents live in, since there is no separate output
+folder — and opens it as a session. Build it with **one** `msword_add_content`
+call carrying the whole document in order, then `msword_save`. Directory parts
+in the requested filename are stripped, so a new file lands at the top of the
+documents folder; to file it in a sub-folder, save-as with
+`msword_save(path: "Reports/Q3 Report.docx")`.
+
+### From a template
+
+To start from a defined template (a letterhead, report layout, contract
+boilerplate, etc.), pass `template` to `msword_create`:
+
+- `msword_create` with `filename: "Q3 Report.docx"` and
+  `template: "Report Template.docx"`. The template is an existing `.docx` in
+  the **templates folder** (if one is configured) or the docs folder, resolved
+  the same forgiving way as `msword_open` (bare name, relative path, or a fuzzy
+  near-miss). Its styles, headers/footers, page setup and boilerplate are
+  inherited into the new file, which is written into the documents folder. The
+  template file itself is never modified, and the result includes `template`
+  (the resolved template) so you can confirm the right one was used.
+- Then edit and `msword_save` as usual. Omit `title` when the template already
+  carries its own title.
+- **To discover templates:** `msword_list_documents` with
+  `location: "templates"` (every entry also carries a `location` of `docs` or
+  `templates`, so a blank is never mistaken for a real document). If
+  no templates folder is configured, fall back to
+  `msword_list_documents` with `query: "template"` over the docs folder.
+- **The templates folder is read-only.** Open a template to read it or to run
+  `msword_list_styles` on it — that is how you find the corporate bullet/heading
+  style names before drafting — but never try to save into that folder: both
+  save-as and save-in-place are refused. Anything you produce goes to the
+  documents folder via `msword_create`.
+- Only `.docx` templates are supported (`.dotx` is not). Any `.pptx` sitting in
+  the templates folder is not readable by this server.
+
+### Filling out a template (placeholders + example tables)
+
+When the template is an *example* to fill in (e.g. an agenda with placeholder
+text and an example items table), after `msword_create(template=...)`:
+
+1. **See what's there:** `msword_get_content` with `mode: "structured"` (shows
+   each table's `table_index`, `rows`, `cols` in order) and `msword_get_tables`
+   (shows every cell's text). Identify the placeholders, the repeating table,
+   its header row and its example rows.
+2. **Text placeholders:** `msword_replace_text` to swap them (works inside table
+   cells too). Templates are easiest to fill when they use explicit
+   `{{TOKEN}}` markers (e.g. `{{MEETING_DATE}}`, `{{CHAIR}}`), which make the
+   `find` unambiguous. If the template just has example prose, use that example
+   text as the `find` string — or, when example values repeat, set the cell by
+   coordinate with `msword_set_cell` instead.
+3. **Grow the table:** for each real item, `msword_add_table_row` with
+   `table_index`, `copy_from_row` = a styled example data row (so borders,
+   shading and fonts are inherited), and `values` = the row's cell texts. Or add
+   the row and fill cells individually with `msword_set_cell`
+   (`table_index`, `row`, `col`, `text`). New rows are always appended last.
+4. **Remove leftover example rows:** `msword_delete_table_row`. **Row indices
+   shift after each delete**, so delete from the highest index down (or re-read
+   `msword_get_tables` between deletes). Never delete the header row unless you
+   mean to; the only remaining row can't be deleted.
+5. **Save:** `msword_save`.
+
+These table edits are always plain (untracked) — table row/cell changes can't be
+recorded as Word tracked changes. `values` maps to *cells* left-to-right, so a
+row with horizontally merged cells has fewer cells than grid columns; passing
+more values than the row has cells is an error.
+
+## Notes
+
+- All paths must be inside the configured docs folder (plus the read-only
+  templates folder); requests outside it are refused — don't fight the sandbox.
+- Opening, creating and saving a document each mirror it to Markdown for the
+  knowledge base (on by default, to `H:\Eva\knowledge\word`). Saving is the
+  one that matters for work you author here — no need to reopen a document to
+  get it indexed.
+- Not supported: comments, tracked moves, formatting-only revisions,
+  headers/footers editing.

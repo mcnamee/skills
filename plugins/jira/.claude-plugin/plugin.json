@@ -1,0 +1,28 @@
+{
+  "name": "jira",
+  "displayName": "Jira",
+  "version": "3.4.3",
+  "description": "Query Jira issues, sprints and projects, and - when switched on - create, edit, comment on and transition issues (Jira Data Center v2 REST API).",
+  "author": {
+    "name": "mcnamee"
+  },
+  "repository": "https://github.com/mcnamee/agent-skills",
+  "license": "MIT",
+  "keywords": [
+    "jira",
+    "issues",
+    "tickets"
+  ],
+  "mcpServers": {
+    "jira": {
+      "type": "stdio",
+      "command": "${EVA_PYTHON}",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/jira.py"
+      ],
+      "env": {
+        "PYTHONUTF8": "1"
+      }
+    }
+  }
+}

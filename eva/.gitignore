@@ -1,0 +1,36 @@
+# Everything under eva/ is YOUR material - real corporate documents, mirrored
+# Confluence pages, exported email, the RAG index. This repo is public, so
+# nothing here is committed: every file is ignored except the READMEs that
+# document what each folder is for.
+#
+# That is also what makes the folder structure itself committable - git stores
+# no empty directories, so each folder survives in the repo because of its
+# README.
+#
+# The other exceptions are CLAUDE.md and opencode.example.jsonc at the top of
+# the tree, and .claude\settings.example.json: Eva's operating instructions and
+# the two config templates are part of the scaffold, not your material, so they
+# travel with the repo the same way the READMEs do. Your filled-in
+# opencode.json and .claude\settings.local.json are never committed.
+#
+# So are the standalone skills and agents under .claude\ - each skill's
+# SKILL.md and each agent's .md. Anything else you put in .claude\ (your own
+# settings.local.json, say) stays ignored, and each skill's exemplars\ folder
+# carries its own .gitignore so the documents you drop there never are.
+#
+# To commit one file deliberately (a genuinely generic template, say):
+#     git add -f eva/templates/word/"Report Template.docx"
+#
+# If none of your material is sensitive and you would rather it travelled with
+# the repo, delete this file.
+
+*
+!*/
+!README.md
+!/CLAUDE.md
+!/opencode.example.jsonc
+!/.claude/settings.example.json
+!/.claude/skills/*/SKILL.md
+!/.claude/skills/org-chart/orgchart.py
+!/.claude/agents/*.md
+!.gitignore

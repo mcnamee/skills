@@ -1,0 +1,28 @@
+{
+  "name": "confluence",
+  "displayName": "Confluence",
+  "version": "8.0.1",
+  "description": "Search and read Confluence pages across one or two instances, with macro content (task reports, page properties, panels, inline tasks) included; refresh a page's figures, dates and statuses in place without breaking its layout, panels or colours, edit the tables on a page in place (even inside table filter or column macros), and create, update and append to pages, and upload attachments (replacing an image on a page); download page attachments into the folder the matching plugin reads; save a page to the knowledge base when you ask - writing only when switched on.",
+  "author": {
+    "name": "mcnamee"
+  },
+  "repository": "https://github.com/mcnamee/agent-skills",
+  "license": "MIT",
+  "keywords": [
+    "confluence",
+    "wiki",
+    "documentation"
+  ],
+  "mcpServers": {
+    "confluence": {
+      "type": "stdio",
+      "command": "${EVA_PYTHON}",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/confluence.py"
+      ],
+      "env": {
+        "PYTHONUTF8": "1"
+      }
+    }
+  }
+}

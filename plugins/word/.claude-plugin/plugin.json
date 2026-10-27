@@ -1,0 +1,29 @@
+{
+  "name": "word",
+  "displayName": "Word (.docx)",
+  "version": "10.0.2",
+  "description": "Read, edit and create Word .docx files - including Word tracked changes, native styles and filling out templates.",
+  "author": {
+    "name": "mcnamee"
+  },
+  "repository": "https://github.com/mcnamee/agent-skills",
+  "license": "MIT",
+  "keywords": [
+    "word",
+    "docx",
+    "tracked-changes",
+    "documents"
+  ],
+  "mcpServers": {
+    "word": {
+      "type": "stdio",
+      "command": "${EVA_PYTHON}",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/word.py"
+      ],
+      "env": {
+        "PYTHONUTF8": "1"
+      }
+    }
+  }
+}

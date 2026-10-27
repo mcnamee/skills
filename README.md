@@ -1,0 +1,632 @@
+# Agent Skills
+
+Three things for an AI agent harness (Claude Code first, with OpenCode
+supported too), all working **entirely offline**:
+
+- **[`plugins/`](plugins)** — eight MCP servers that give an agent hands on the
+  things enterprise work actually lives in: Word documents, Excel workbooks,
+  Outlook mail, Confluence, Jira, PDFs, plus a local RAG knowledge base to tie
+  them together. This repo doubles as a plugin marketplace for them.
+- **[`eva/.claude/skills/`](eva/.claude/skills)** — standalone skills that
+  need no server and no install beyond the `eva/` copy below.
+- **[`eva/.claude/agents/`](eva/.claude/agents)** — subagents that take a whole
+  job away and hand back a finished result, built on top of the servers and
+  skills above.
+
+Plus **[`eva/`](eva)** — the working folder they all read, write and index,
+carried here as a scaffold you copy to `H:\Eva`. The skills and agents live in
+its `.claude\` folder, so they install with it and stay scoped to `H:\Eva`
+rather than your whole account. It holds the knowledge base,
+the document library, and the **templates** — the blank `.docx`/`.pptx` files
+new documents and decks are built from. It also carries
+[`eva/CLAUDE.md`](eva/CLAUDE.md), the standing instructions that make the
+assistant **Eva** — an executive virtual assistant who writes in Australian
+English, without em dashes or the other AI tells, and never fills a gap in the
+source material with something invented.
+
+> **Using OpenCode instead of Claude Code?** The same servers and skills work
+> there too - see [OPENCODE.md](OPENCODE.md) for the install.
+
+## Why this exists
+
+- **Built for Windows endpoints in an Enterprise environment.** No internet calls, no telemetry,
+  no registry lookups. Copy the folder across, add it as a local marketplace,
+  install.
+- **One file per server.** Every server is a single `.py` — nothing to build, no
+  package tree to transfer. Three of the eight are **standard library only**, and
+  the standalone skills are prose (bar `org-chart`'s one standard-library script).
+- **Four settings, once, for the whole suite.** `EVA_PYTHON`,
+  `EVA_DOCUMENTS_DIR`, `EVA_TEMPLATES_DIR` and `EVA_KNOWLEDGE_DIR` are the
+  configuration. Each server works in its own sub-folder of those roots, named
+  after the plugin, so there is nothing per-plugin to fill in, no folder prompts
+  at install, and no folder flags to keep in step across a `.mcp.json`, a
+  `claude mcp add` line and eight plugin dialogs. `/plugin install` asks for
+  nothing: what is genuinely one server's own — a Confluence URL, an
+  embeddings endpoint — is an environment variable too, set in the same `env`
+  block. The matching skill comes with the server.
+- **Confined by default.** Every server that touches the filesystem is locked to
+  its sub-folders, and refuses to start unconfined rather than falling back to
+  "anywhere". The office plugins - `word`, `powerpoint` and `excel` - can
+  change a file you already have in their folder; the rest either read, or
+  write new files (Markdown, a downloaded attachment) into their own folders.
+- **Shared systems are read-only until you say otherwise.** `confluence` and
+  `jira` can write - create and edit pages, raise and move tickets - but each
+  ships with writing **off**. One variable (`CONFLUENCE_ALLOW_WRITE`,
+  `JIRA_ALLOW_WRITE`) turns it on; until then the write tools are not even
+  offered.
+- **Secrets never hit the command line.** Tokens and API keys are environment
+  variables only — argv is visible to other local users in process listings.
+- **Notes you can read at a lectern.** `powerpoint` formats the one surface
+  nobody in the room sees: `**bold**`, `__underline__`, `- ` dot points and
+  blank lines in a slide's `notes` become real runs in the notes pane, so
+  moving text off a slide does not make it harder to deliver.
+- **A meeting arranged for you.** Name someone the way you'd say it out loud
+  and `outlook` finds them in the enterprise directory, checks everyone's
+  free/busy and the room's, offers the times that actually work, and saves the
+  invitation as a draft — carrying across an agenda you just wrote, rather than
+  asking you to retype it. You review it and press Send; it cannot send
+  anything itself.
+- **A day you can print.** `outlook` turns a day's calendar into an A4
+  landscape PDF planner - the day on an hour-by-hour timeline, the days after it
+  down the other half - keeping the colours your Outlook categories already
+  have, at a strength that survives a printer. It is drawn from the standard
+  library alone, so printing adds no dependency to an offline endpoint.
+- **Your team's tasks on one sheet.** `outlook` gathers your direct reports'
+  open tasks from the Confluence page that collates them and the emails you
+  sent them with a due date, and prints them double-sided: unassigned and whole-team tasks
+  first, then a column per person, overdue items in red.
+- **They compose.** `word` and `powerpoint` mirror what they open into one
+  Markdown folder, `confluence` and `outlook` save the pages and emails you ask
+  them to keep into the same folder, and `pdf-to-md` fills it from PDFs; the
+  `knowledge-base` server indexes it and answers questions over the lot. A
+  spreadsheet attached to a Confluence page downloads straight into the folder
+  `excel` reads, so "get the budget from page X and total column D" is one
+  request.
+- **And it grows.** `word` mirrors documents it *writes*, not just ones it
+  reads, and `knowledge-base` takes a `kb_capture` call — so an analysis or a
+  research brief that would otherwise vanish with the chat goes back into the
+  index and answers the same question next time.
+
+## The plugins
+
+| Plugin | Version | What it does | pip install |
+|---|---|---|---|
+| [**word**](plugins/word) | 10.0.2 | Read, edit and create `.docx` — real Word tracked changes, native styles, filling out templates | `python-docx` |
+| [**powerpoint**](plugins/powerpoint) | 6.0.2 | Build sectioned `.pptx` decks that inherit your own template's layouts and theme, with formatted speaker notes, audited against the 10/20/30 rule | `python-pptx` |
+| [**excel**](plugins/excel) | 6.1.1 | Read and analyse workbooks - sheets, Tables by name, pivot tables - by parsing `.xlsx` directly; write cells and Table rows and create real PivotTables through Excel | _none_ (`pywin32` to write) |
+| [**outlook**](plugins/outlook) | 11.7.2 | Read local Outlook mail and calendar via COM, with a content blacklist; schedules a meeting (fuzzy directory search, free/busy, and an **unsent** draft you send yourself); opens an agreed email or reply in Outlook as an **unsent** draft, with your signature; prints a day as an A4 PDF planner in your own category colours (with up to four colleagues' calendars on the back), prints your team's open tasks from Confluence and the emails you sent with a due date as a double-sided sheet, and saves an email to the knowledge base when you ask | `pywin32` |
+| [**confluence**](plugins/confluence) | 8.0.1 | Search and read Confluence pages, across one or two instances, with macro content included; download attachments into the folder the matching plugin reads; saves a page to the knowledge base when you ask; when switched on, create pages, change figures, dates and statuses in place without breaking a page's design, update one section, edit a table's figures in place (even inside a table filter or column macro), append, and upload an attachment (replacing an image on a page) | _none_ |
+| [**jira**](plugins/jira) | 3.4.3 | Query issues, sprints and projects; when switched on, create, edit, comment on and transition issues (Jira Data Center v2 API) | _none_ |
+| [**knowledge-base**](plugins/knowledge-base) | 6.0.1 | True RAG over your own Markdown: local ChromaDB index + your embeddings API, and capture notes back into it | `chromadb` |
+| [**pdf-to-md**](plugins/pdf-to-md) | 7.0.1 | Convert PDFs to Markdown with tables preserved | `pymupdf pymupdf4llm` |
+
+Each plugin's README covers its settings, tools, file access and example
+prompts. Every server also carries a semantic version in `__version__`, printed
+by `--version` and reported to the MCP client in `serverInfo`.
+
+## Install
+
+> **Shortcut:** steps 3 to 5 can be one file.
+> [`eva/.claude/settings.example.json`](eva/.claude/settings.example.json)
+> registers the marketplace, enables all eight plugins (so their skills come
+> too) and lists every environment variable the suite reads, blank. Copy it to
+> `H:\Eva\.claude\settings.local.json`, fill it in, and open Claude Code in
+> `H:\Eva` - [`eva/.claude/README.md`](eva/.claude/README.md#settingsexamplejson)
+> has the details. The steps below are the long way round, and what to do if
+> you'd rather set things globally.
+
+Everything below is **Windows / PowerShell**, which is what this suite targets.
+Two things to know if you're pasting from elsewhere: a quoted path at the start
+of a command needs the call operator (`& "C:\...\python.exe"`), and `%VAR%`
+does not expand — it's `$env:VAR`.
+
+**1. Lay out the working folder.** Copy the repo's [`eva/`](eva) folder to
+`H:\Eva`:
+
+```powershell
+Copy-Item -Recurse C:\path\to\agent-skills\eva H:\Eva
+```
+
+That one step creates every folder the servers need, correctly related to each
+other — mirrors landing inside the indexed corpus, one folder per file type with
+nothing to file first. **Every folder must exist**: a plugin whose folder is
+missing either refuses to start (its documents folder) or runs with that
+feature off. See [Folder layout](#folder-layout) for what goes where, and
+`eva/README.md` for each folder's own README.
+
+The copy brings [`eva/CLAUDE.md`](eva/CLAUDE.md) with it, which is what turns
+Claude into Eva when you run Claude Code in `H:\Eva`, and `eva\.claude\`, which
+installs the [standalone skills](#skills) and [agents](#agents) for Claude Code
+opened there. Open it and fill in the
+**About me** block — your name, role, who you write to, how you sign off. See
+[The assistant's instructions](#the-assistants-instructions).
+
+**2. Install the pip dependencies** into the interpreter you are going to name
+in step 3:
+
+```powershell
+& "C:\path\to\python.exe" -m pip install python-docx pymupdf pymupdf4llm pywin32 chromadb
+```
+
+(Drop `pywin32` if you're not on Windows / not using `outlook` or `excel`'s
+writing. Install only
+what the plugins you want need — see the table above.) `word.py`'s docstring
+walks through sideloading the wheels.
+
+**3. Set the four suite-wide environment variables.** This is the whole
+folder story: every plugin reads these, and each works in its own sub-folder
+of the three roots, named after the plugin. Put them in the `env` block of
+Claude Code's settings (see [Where to set a variable](#where-to-set-a-variable)
+for which file):
+
+```json
+{
+  "env": {
+    "EVA_PYTHON":        "C:\\path\\to\\python.exe",
+    "EVA_DOCUMENTS_DIR": "H:\\Eva\\documents",
+    "EVA_TEMPLATES_DIR": "H:\\Eva\\templates",
+    "EVA_KNOWLEDGE_DIR": "H:\\Eva\\knowledge"
+  }
+}
+```
+
+Or as Windows user variables, which every plugin picks up just the same:
+
+```powershell
+[Environment]::SetEnvironmentVariable("EVA_PYTHON",        "C:\path\to\python.exe",       "User")
+[Environment]::SetEnvironmentVariable("EVA_DOCUMENTS_DIR", "H:\Eva\documents",            "User")
+[Environment]::SetEnvironmentVariable("EVA_TEMPLATES_DIR", "H:\Eva\templates",  "User")
+[Environment]::SetEnvironmentVariable("EVA_KNOWLEDGE_DIR", "H:\Eva\knowledge",            "User")
+```
+
+| Variable | What it points at | Default if unset |
+|---|---|---|
+| `EVA_PYTHON` | The `python.exe` from step 2 — every server runs under it. A mismatch here is the most common cause of "dependency missing" | *(none — set it)* |
+| `EVA_DOCUMENTS_DIR` | The document library | `H:\Eva\documents` |
+| `EVA_TEMPLATES_DIR` | The template library | `H:\Eva\templates` |
+| `EVA_KNOWLEDGE_DIR` | The RAG corpus — the one indexed root | `H:\Eva\knowledge` |
+
+**4. Add this repo as a marketplace**, then install whichever plugins you want.
+These are slash commands, typed inside Claude Code — not shell commands:
+
+```
+/plugin marketplace add C:\path\to\agent-skills
+/plugin install word@mcnamee-agent-skills
+/plugin install excel@mcnamee-agent-skills
+```
+
+There are **no install prompts** for any plugin. What is genuinely one
+server's own (a Confluence or Jira URL, an embeddings endpoint, the
+tracked-change author) is an environment variable listed in that plugin's
+README, set in the same `env` block as step 3. The plugins are independent, so
+a machine without `pywin32` simply doesn't install `outlook`.
+
+`excel` is the simplest to start with: standard library only, nothing to set.
+
+**5. Set your secrets** the same way, before starting Claude Code — in the
+`env` block beside the others, or as Windows variables. They're read from the
+environment the server starts in, never stored in the plugin. Only needed for
+the plugins you actually install:
+
+```powershell
+setx CONFLUENCE_TOKEN "your-personal-access-token"
+setx JIRA_TOKEN       "your-personal-access-token"
+setx KB_EMBED_API_KEY "your-api-key"
+```
+
+| Plugin | Environment variable |
+|---|---|
+| `confluence` | `CONFLUENCE_TOKEN`, plus `CONFLUENCE_TOKEN_2` if you point it at a second Confluence instance |
+| `jira` | `JIRA_TOKEN` |
+| `knowledge-base` | `KB_EMBED_API_KEY` |
+
+Two `setx` gotchas. It **doesn't affect processes that are already running**, so
+quit VS Code completely — a window reload is not enough — and reopen it. And it
+**truncates values at 1024 characters**; if you ever hit that, set the variable
+through System Properties → Environment Variables instead.
+
+To check a variable took, in a **new** window: `$env:JIRA_TOKEN`. To set one for
+the current session only (handy for testing, gone when you close the window):
+`$env:JIRA_TOKEN = "..."`.
+
+### Where to set a variable
+
+Every setting in this suite is an environment variable the server inherits
+from Claude Code, so there are two places to put one:
+
+- **The `env` block of Claude Code's settings** (recommended). Either
+  `%USERPROFILE%\.claude\settings.json`, which applies in every folder, or
+  `H:\Eva\.claude\settings.local.json`, which applies when Claude Code is opened
+  in `H:\Eva` and, being on `H:`, survives a change of endpoint. Re-copying
+  `eva\` never overwrites `settings.local.json`; start it from
+  [`eva/.claude/settings.example.json`](eva/.claude/settings.example.json),
+  which lists every variable. Backslashes in JSON are
+  doubled (`"H:\\Eva\\documents"`), or use forward slashes.
+- **Windows user environment variables** (`setx`, or
+  `[Environment]::SetEnvironmentVariable(..., "User")`), as above.
+
+A value in the settings `env` block beats a Windows variable of the same name.
+Either way, **quit Claude Code completely and reopen it** after a change: a
+running session keeps the environment it started with. **A blank value means
+"not set"**, so the server's default applies. OpenCode reads the same variable
+names from each server's `environment` block instead - see
+[OPENCODE.md](OPENCODE.md).
+
+> Plugins used to prompt for some of these at install. They no longer do,
+> because a blank prompt was passed to the server as an empty value that
+> overrode the same variable set anywhere else. If you filled one in under an
+> older version, move it into the `env` block.
+
+Useful commands: `/plugin` to browse and manage, `/mcp` to confirm a server
+connected, `claude mcp list` to spot an unresolved environment variable, and
+`/plugin marketplace update mcnamee-agent-skills` after you transfer a new
+version across.
+
+`claude mcp list` is the quickest check that step 3 took: it prints the command
+each server will run, so a resolved `EVA_PYTHON` shows as a real path. If it
+shows the literal `${EVA_PYTHON}` and `Failed to connect — ENOENT: Executable
+not found in $PATH`, the variable is not set in the environment Claude Code was
+launched from — set it, then **quit Claude Code completely and reopen**, since
+neither `setx` nor `[Environment]::SetEnvironmentVariable` reaches a process
+that is already running.
+
+> **Skills are namespaced** by their plugin, so it's `/word:word` rather
+> than `/word`. To invoke one by its bare name, install the skill on its own
+> instead — see [Skills](#skills) below.
+>
+> **Plugins are cached on install** (copied under `~/.claude/plugins/`), which is
+> why each plugin contains its own server file rather than sharing one — a path
+> reaching outside the plugin would break once cached.
+
+### Before you wire anything in
+
+Run the server's `--check` first. It validates config (and connectivity, for the
+HTTP servers) without starting the server, and is far easier to read than an MCP
+connection failure:
+
+```powershell
+& $env:EVA_PYTHON C:\path\to\agent-skills\plugins\word\word.py --check
+```
+
+It prints the folders it resolved and says whether each came from your
+environment variables or the built-in default, which is usually enough to spot
+a typo without reading anything else.
+
+### Manual install, without plugins
+
+If you'd rather configure a server directly — or want one configured differently
+from the environment Claude Code gives it — register it with `claude mcp add --scope user`
+(available in every folder), or copy [`.mcp.json.example`](.mcp.json.example) to
+`.mcp.json` in the folder you open Claude Code in (config travels with the
+files). This route registers the servers only: the plugin skills come with the
+plugins, so without them you get the tools but not `/word:word` and the rest. Keep `PYTHONUTF8=1`: without it, Windows' legacy codepage can corrupt the
+stdio JSON stream on non-ASCII content. Pass secrets with `-e` / the `env` block,
+never as flags.
+
+```powershell
+claude mcp add excel --scope user -e PYTHONUTF8=1 -e EXCEL_DOCS_DIR=C:\path\to\your\workbooks -- $env:EVA_PYTHON C:\path\to\agent-skills\plugins\excel\excel.py
+```
+
+(No `&` needed there — `claude` is unquoted, so PowerShell treats it as a
+command already.)
+
+## Configuration conventions
+
+Every server follows the same pattern, so once you know one you know them all.
+The per-plugin READMEs list each server's actual settings.
+
+1. **Configuration is environment variables only.** No server takes a folder
+   flag, a URL flag or a tuning flag; the only command-line flags are actions —
+   `--check`, `--version`, and `knowledge-base`'s `--reindex` / `--search` /
+   `--ask` / `--debug`. One way to set a thing means two settings can never
+   disagree about it, and nothing has to be re-passed in a `.mcp.json`, a
+   `claude mcp add` line and a settings file at once. No plugin has install
+   options either: a blank option would be passed as an empty value and
+   override the same variable set in the environment.
+2. **Four variables configure the whole suite:** `EVA_PYTHON`,
+   `EVA_DOCUMENTS_DIR`, `EVA_TEMPLATES_DIR`, `EVA_KNOWLEDGE_DIR`. Each server
+   works in its own **sub-folder** of those roots, named after the plugin —
+   `word` reads `documents\word`, writes `knowledge\word`, and takes its blanks
+   from `templates\word`. `knowledge-base` is the one exception, and
+   necessarily so: it indexes the *whole* knowledge root.
+3. **A per-server variable overrides one folder,** for an endpoint whose layout
+   differs: `<PREFIX>_DOCS_DIR`, `<PREFIX>_TEMPLATES_DIR`, `<PREFIX>_KB_DIR`.
+   It beats the shared root. Prefixes: `CONFLUENCE_`, `JIRA_`, `KB_`, `EXCEL_`,
+   `OUTLOOK_`, `MSWORD_` (the `word` server keeps this older prefix), `PDF2MD_`,
+   `POWERPOINT_`. `CONFLUENCE_DOCS_DIR` is the one that names a **root**
+   rather than a folder: attachments go to the per-type sub-folders of it
+   (`excel\`, `word\`, ...), because those are the folders the other plugins
+   read.
+4. **Writing to a shared system is opt-in:** `<PREFIX>_ALLOW_WRITE=true`
+   (`CONFLUENCE_`, `JIRA_`). Blank or unset means read-only, and the write
+   tools are not offered at all, so updating a plugin never hands it new power
+   over a wiki or a tracker. The office plugins (`word`, `powerpoint`,
+   `excel`) edit documents in their own folder by design, so need no switch.
+5. **Secrets are env-var only**, and always were — no flag has ever existed
+   that could put a token in a command line, where other local users can read
+   it out of a process listing.
+6. **A blank value means "not configured"**, so the shared root still applies —
+   that is what an MCP client substitutes for a setting left empty. To switch an
+   optional folder off, set it to `off` (`none`, `no`, `false` and `disabled`
+   also work). A folder you named yourself that does not exist is a fatal
+   error, because it is almost always a typo; a built-in default that does not
+   exist yet is a warning, and the feature it enables simply stays off.
+7. **Every folder must exist.** Copying [`eva/`](eva) to `H:\Eva` creates all of
+   them; each server's `--check` reports which are missing and where the path
+   came from.
+
+## Folder layout
+
+One working folder, `H:\Eva`, holds everything the servers read, write and
+index. The repo carries it as a scaffold — [`eva/`](eva) is the same tree with a
+README in every folder and no content, so `Copy-Item -Recurse ...\eva H:\Eva`
+lays it out in one step and every default below is already correct.
+
+```
+H:\Eva\
+├─ CLAUDE.md         who Eva is, and how she writes
+├─ .claude\         standalone skills (with their exemplars) and agents
+├─ knowledge\        the RAG corpus - Markdown only, the ONE indexed root
+│  ├─ notes\           Markdown you write by hand
+│  ├─ captures\        notes kb_capture writes back
+│  ├─ confluence\      pages you asked the confluence plugin to save
+│  ├─ email\           emails you asked the outlook plugin to save
+│  ├─ word\            documents the word plugin mirrored
+│  ├─ powerpoint\      decks the powerpoint plugin mirrored
+│  └─ pdf\             PDFs the pdf-to-md plugin converted
+├─ index\            the ChromaDB vector store - derived, disposable
+├─ documents\        one folder per file type - yours and the assistant's
+│  ├─ word\            .docx (searched recursively)
+│  ├─ powerpoint\      .pptx (searched recursively)
+│  ├─ excel\           .xlsx (top level only - excel does not recurse)
+│  ├─ pdf\             source PDFs, and day planners outlook printed
+│  └─ images\          org charts /org-chart draws (.svg), and images
+│                      (confluence downloads attachments into these five too,
+│                      and uploads only from them)
+└─ templates\        blank branded files new documents/decks start from
+   ├─ word\             .docx templates         (read-only)
+   └─ powerpoint\       .pptx / .potx templates (read-only)
+```
+
+Three environment variables name the three roots; the plugin's own name is the
+sub-folder. **Every folder listed here must exist.**
+
+| Plugin | `EVA_DOCUMENTS_DIR\` | `EVA_TEMPLATES_DIR\` | `EVA_KNOWLEDGE_DIR\` |
+|---|---|---|---|
+| `word` | `word\` | `word\` | `word\` |
+| `powerpoint` | `powerpoint\` | `powerpoint\` | `powerpoint\` |
+| `excel` | `excel\` | — | — |
+| `pdf-to-md` | `pdf\` | — | `pdf\` |
+| `outlook` | `pdf\` (printed planners) | — | `email\` |
+| `confluence` | `excel\`, `word\`, `powerpoint\`, `pdf\` (downloaded attachments, by type) | — | `confluence\` |
+| `knowledge-base` | — | — | the **whole root** it indexes, plus `captures\` |
+| `jira` | — | — | — |
+
+`knowledge-base` also keeps its vector store in `H:\Eva\index`
+(`KB_INDEX_DIR`) — the one folder in the suite that is not under a shared root,
+deliberately outside the corpus so a large binary database does not sit in the
+folder you index.
+
+Three rules make it hold together, and all three are worth knowing before you
+move a folder:
+
+**One folder per file type.** Every `.docx` lives in `documents\word\`, every
+`.pptx` in `documents\powerpoint\`, whether you put it there or the assistant
+wrote it. There is no `input\`, no `output\`, and no `inbox\` vs `library\`
+split: each plugin can open nothing outside its single folder, so the extras
+were either unreachable or one more setting to keep in sync — and each made you
+decide where a file belonged before you could ask a question about it. It is
+also what lets the plugins have no folder settings of their own: the folder name
+*is* the plugin name. Organise inside the folder however you like; `word` and
+`powerpoint` search recursively and a bare filename still finds the file.
+
+**There is one indexed root.** `knowledge\` is the only folder the RAG index
+reads, so every server that produces Markdown writes inside it. Deriving all of
+them from one `EVA_KNOWLEDGE_DIR` is what makes that impossible to get wrong;
+point a single mirror anywhere else and it fills up faithfully while `kb_ask`
+never sees a word of it.
+
+**Folders are named after what wrote them, not what they are about.** Topic
+folders rot — every document belongs to three of them. Provenance maps
+one-to-one onto a setting, retrieval is semantic anyway, and cleanup stays
+surgical: delete `knowledge\confluence\` and save the pages again, with nothing
+you wrote yourself at risk.
+
+[`eva/README.md`](eva/README.md) covers the reasoning, how to put the tree on
+another drive, and why nothing in it is committed. Each folder's own README says
+what belongs there.
+
+## File access policy
+
+Every server that touches the filesystem is confined to its sub-folders of the
+three shared roots, and those folders are **required**:
+
+| Plugin | Local file access |
+|---|---|
+| `word` | Read/write, confined to the one documents folder (where new documents are created too) plus the knowledge-base folder; the templates folder is read-only. Opening, creating and saving each mirror to the knowledge-base folder |
+| `powerpoint` | Read/write, confined to the one presentations folder (where new decks are created too) plus the knowledge-base folder; the templates folder is read-only. Opening, creating and saving each mirror to the knowledge-base folder |
+| `excel` | Read/write, confined to the workbook folder (top level only). Reads parse the file directly; writes change a workbook in that folder (or save a copy into it) through a private Excel instance |
+| `knowledge-base` | Reads the documents folder; writes its vector index (`H:\Eva\index`) and captured notes (`H:\Eva\knowledge\captures`, always inside the documents folder); never edits or deletes an existing document; network only to the endpoints you configure |
+| `pdf-to-md` | Reads the PDF folder, writes the output folder |
+| `confluence` | Writes the knowledge-base folder only for a page you asked to keep (`save_to_kb`) or a Markdown attachment you downloaded, and the per-type documents folders only for an attachment you asked it to download - never replacing a file already there unless told to. Reading a page saves nothing. Set `CONFLUENCE_KB_DIR` and `CONFLUENCE_DOCS_DIR` to `off` and the server touches no local file |
+| `outlook` | Reads no local folder at all. Writes two, both only when asked: the knowledge-base folder for an email you asked to keep (`save_to_kb`), and the PDF folder for a day planner you asked it to print. Reading mail saves nothing, and a blacklisted message or meeting is never written at all. Set both folders to `off` and the server touches no local file. In the mailbox it can never send, accept, move or delete; its one write there is an **unsent** meeting draft you review and send yourself (`OUTLOOK_ALLOW_DRAFTS=false` removes even that) |
+| `jira` | None. HTTP GET to Jira only, unless `JIRA_ALLOW_WRITE=true` adds the write tools |
+
+Paths are resolved (symlinks included) before the containment check, so a
+symlink dropped inside a configured folder cannot reach files outside it.
+
+## Skills
+
+There are two kinds, in two places.
+
+**Every plugin ships one**, at `plugins/<name>/skills/<name>/SKILL.md` — it
+teaches an agent that server's tools, the right call order, and the sharp
+edges (read-only limits, sandboxes, the tracked-changes workflow, when to
+reindex). Installing the plugin installs its skill, namespaced as
+`/<plugin>:<skill>` — so `/word:word`, not `/word`.
+
+Two plugins ship more than one, split by the question each skill answers.
+
+`outlook` ships **three**. `/outlook:outlook` is mail, calendar reading and
+printing a day. `/outlook:team-tasks` gathers your team's open tasks from
+Confluence and the emails you sent with a due date, and prints them. `/outlook:meeting-scheduler` is
+the separate job of arranging a meeting — fuzzy-finding a person or room in the enterprise directory, reading
+everyone's free/busy, and saving an unsent draft for you to send. They are
+split because scheduling has its own workflow and its own sharp edges (never
+invent an address, always confirm which Josh, never claim anyone was invited),
+and burying that in the general mail skill is how it gets skipped.
+
+`powerpoint` ships **three**, split the same way. `/powerpoint:slide-deck` answers *what is this deck* — the house shape:
+a title slide, a divider introducing every section, slides inside a section
+titled `<Short Section Title> / <Slide Title>`, and speaker notes on every slide
+written as bold-labelled dot points. `/powerpoint:powerpoint` answers *how do I
+drive the server*. `/powerpoint:kawasaki` answers *how much is too much* — Guy
+Kawasaki's 10/20/30 rule, 10 slides, 20 minutes, a 30-point minimum font. They
+are split because the rule is a way of thinking about any presentation, in any
+tool, while the mechanics are about driving this server; the rule fires when
+someone asks for a deck at all, and reaches for the server's audit only when it
+is there.
+
+**[`eva/.claude/skills/`](eva/.claude/skills) holds standalone skills**, which
+need no server and no plugin. They install with the `eva\` copy in
+[step 1](#install), landing at `H:\Eva\.claude\skills\` - where Claude Code (and
+OpenCode) opened in `H:\Eva` loads them:
+
+| Skill | Invoke | What it does |
+|---|---|---|
+| [**brief-writer**](eva/.claude/skills/brief-writer) | `/brief-writer` | Drafts a decision or noting brief for a senior executive, following the structure of an exemplar in its own `exemplars/` folder, and finishing with `/polish` |
+| [**email-writer**](eva/.claude/skills/email-writer) | `/email-writer` | Drafts an email in your voice, classifying what the email is for and matching that intent to your own sent mail in its `exemplars/` folder, then running `/unslop`; puts the agreed email into Outlook as an unsent draft when you say so |
+| [**exemplar-writer**](eva/.claude/skills/exemplar-writer) | `/exemplar-writer` | Writes a document in the shape of one you already have — pulls the structure, section order, proportions and register out of an exemplar, then writes your material to that shape |
+| [**org-chart**](eva/.claude/skills/org-chart) | `/org-chart` | Draws an organisation chart as an SVG in the house design from staffing data (often a spreadsheet on a Confluence page), ready to upload back to the page with `confluence_upload_attachment` |
+| [**polish**](eva/.claude/skills/polish) | `/polish` | Rewrites a draft into Australian Public Service style — the Australian Government Style Manual — asking who the reader is and what the medium is, then picking the register from them |
+| [**unslop**](eva/.claude/skills/unslop) | `/unslop` | Strips AI-slop markers from writing — padding, tell-tale vocabulary, stock LLM sentence shapes — leaving meaning and voice intact |
+
+Run `/doctor` or restart Claude Code if one doesn't appear. See
+[`eva/.claude/skills/README.md`](eva/.claude/skills/README.md) for updating one
+on its own, installing for your whole account instead, and adding another.
+
+The three writers stack on the other two: `brief-writer` finishes through
+`/polish`, `email-writer` and `exemplar-writer` through `/unslop`, so install
+the pair each one needs (the `eva\` copy brings all five).
+All three keep their own `exemplars/` folder inside the skill — your approved
+briefs, your sent mail, your finished reports — which is what makes the `eva\`
+copy to an endpoint carry the house structure and your voice with it. Nothing in those
+folders is committed except their README.
+
+Note the difference in what they give Claude: a **plugin** adds *tools*, a
+**skill** adds *instructions*. A server's skill describes how to use it — it
+isn't a way to run one. These are MCP servers, launched as long-running stdio
+subprocesses, not scripts a skill shells out to. That matters most for `word`
+and `powerpoint`, which are session-based (`msword_open` / `powerpoint_create`
+return a `session_id` and hold the file in memory until it is saved).
+
+## Agents
+
+**[`eva/.claude/agents/`](eva/.claude/agents) holds standalone subagents** — a separate context with its
+own instructions that the main session hands a whole job to, and gets a finished
+result back from. Where a skill steers the conversation you are already in, an
+agent goes away and does the work in its own.
+
+| Agent | Invoke | What it does |
+|---|---|---|
+| [**researcher**](eva/.claude/agents/researcher.md) | `@agent-researcher` | Researches a topic across the local knowledge base and Confluence, corroborates what it finds, and returns a cited brief with confidence ratings and named gaps — then offers to capture the brief back into the knowledge base |
+
+It installs with the `eva\` copy in [step 1](#install), landing at
+`H:\Eva\.claude\agents\`, and Claude Code opened in `H:\Eva` picks it up
+(OpenCode does not read `.claude\agents\`). It is written for
+this suite rather than as a generic agent and assumes it is installed, searching
+`knowledge-base` and `confluence` on every question. What it produces is
+research, not a document: hand the brief to [`/brief-writer`](eva/.claude/skills/brief-writer),
+[`/email-writer`](eva/.claude/skills/email-writer) or
+[`/exemplar-writer`](eva/.claude/skills/exemplar-writer) to write up, which keeps you in the
+conversation while the wording is settled. See
+[`eva/.claude/agents/README.md`](eva/.claude/agents/README.md) for the details.
+
+## Templates and exemplars
+
+Two kinds of "here is what good looks like", kept in two different places
+because they get used differently. A **template** *is* the output's first draft;
+an **exemplar** is read for guidance and never becomes the output.
+
+**Templates** live in the Eva tree at [`eva/templates/`](eva/templates), one
+folder per plugin:
+
+| Folder | Holds | Wired up by |
+|---|---|---|
+| [**`templates/word`**](eva/templates/word) | Blank `.docx` templates — letterhead, report layout, contract boilerplate | `EVA_TEMPLATES_DIR` + `\word` — read-only |
+| [**`templates/powerpoint`**](eva/templates/powerpoint) | Blank `.pptx`/`.potx` deck shells — masters, layouts, theme | `EVA_TEMPLATES_DIR` + `\powerpoint` — read-only |
+
+Each is a **read-only** second root for its plugin: files can be listed, opened
+and used as the base for something new, but every save into the folder is
+refused, so the blanks stay blank. Anything created lands in the matching
+`documents\` folder instead.
+
+**Exemplars** live inside the skill that reads them, in its own `exemplars/`
+folder, so they travel with the folder copy to an endpoint rather than needing a
+separate copy and a path in every prompt:
+
+| Skill | Its exemplars are |
+|---|---|
+| [`/exemplar-writer`](eva/.claude/skills/exemplar-writer) | Any document that should follow the shape of one you already have — a report, proposal, file note, minutes |
+| [`/brief-writer`](eva/.claude/skills/brief-writer) | Briefs, matched by kind (decision, noting, ministerial) |
+| [`/email-writer`](eva/.claude/skills/email-writer) | Your own sent mail, matched by intent |
+
+Name a file in the prompt and it beats the folder — including a document sitting
+in `documents\word`, which is the way to use a `.docx` exemplar that a skill
+folder cannot reach.
+
+Neither kind is indexed, deliberately. Add a board paper to the RAG corpus and
+its phrasing comes back with the same authority as a policy: `kb_ask` starts
+citing house style as fact, and a two-year-old example as current practice.
+Nothing in either place is **committed** to this repo, since in real use these
+are your own documents — see [`eva/.gitignore`](eva/.gitignore) and each skill's
+`exemplars/.gitignore`.
+
+## The assistant's instructions
+
+The plugins give Claude tools and the folders give it somewhere to work.
+[`eva/CLAUDE.md`](eva/CLAUDE.md), which the copy in step 1 puts at
+`H:\Eva\CLAUDE.md`, gives it a job. Claude Code loads it whenever you run in
+that folder, so run there rather than somewhere else.
+
+It defines **Eva**, an executive virtual assistant: correspondence, diary and
+meeting prep, minutes and actions, briefs and board papers, decks, research over
+the knowledge base, and status summaries out of Jira. Along with the role it
+fixes the things you would otherwise correct in every reply:
+
+- **Australian English throughout**, in documents as well as chat — `-ise`
+  spellings, `31 August 2026`, `2.30 pm`, financial years as `2025–26`,
+  metric, and the Australian Government Style Manual as the authority for the
+  finer mechanics.
+- **No em dashes and no other AI tells** — the openers, the vocabulary, the
+  "it's not X, it's Y" shapes. This is the always-on subset of
+  [`unslop`](eva/.claude/skills/unslop); the full passes are still `/unslop` then
+  `/polish` before anything leaves your desk.
+- **Sourced or not stated** — on a network with no internet, an empty search is
+  a finding to report rather than a gap to fill from memory, and every fact
+  carries where it came from.
+- **Boundaries** — Eva drafts, you send. Nothing in the suite can send mail or
+  accept a meeting, and the file makes that a rule rather than an accident:
+  no committing on your behalf, sensitivity labels carried through and never
+  downgraded, personal information kept out of the indexed corpus.
+
+Fill in the **About me** block at the top (name, role, stakeholders, sign-off)
+and edit the rest to suit — it is prose, and yours to change. To make Eva the
+default in every folder instead of just `H:\Eva`, copy the file to
+`%USERPROFILE%\.claude\CLAUDE.md`, remembering it will then shape coding
+sessions too.
+
+## Versioning
+
+Versions follow semver and are bumped on **every** change (see `CLAUDE.md`):
+
+- **MAJOR** — breaking change to configuration (flag/env-var renames) or to a
+  tool's name/arguments/output shape
+- **MINOR** — new tools, new flags, new behaviour (backwards compatible)
+- **PATCH** — bug fixes, documentation-only or internal changes
+
+A version appears in five places that must stay in sync: the server's
+`__version__`, its docstring title, its `plugin.json`, its own README header
+and the plugin table above (the marketplace manifest mirrors them too).
+Standalone skills and agents under `eva/.claude/` are unversioned —
+they are prose, not an interface anything depends on.
