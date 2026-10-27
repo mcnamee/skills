@@ -1,8 +1,8 @@
 {
-  "name": "mcnamee-agent-skills",
+  "name": "mcnamee-skills",
   "owner": {
     "name": "mcnamee",
-    "url": "https://github.com/mcnamee/agent-skills"
+    "url": "https://github.com/mcnamee/skills"
   },
   "description": "Single-file MCP servers for working with Word, PowerPoint, Excel, Outlook, Confluence, Jira, PDFs and a local RAG knowledge base. Each plugin bundles one server with its matching skill, so it installs and updates as one unit - including fully offline.",
   "plugins": [

@@ -16,8 +16,8 @@ OCR of scanned PDFs additionally requires **Tesseract installed on the machine**
 ## Install
 
 ```
-/plugin marketplace add C:\path\to\agent-skills
-/plugin install pdf-to-md@mcnamee-agent-skills
+/plugin marketplace add C:\path\to\skills
+/plugin install pdf-to-md@mcnamee-skills
 ```
 
 Claude Code prompts for nothing - both folders and the Python interpreter come

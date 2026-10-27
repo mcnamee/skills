@@ -20,8 +20,8 @@ issue.
 ## Install
 
 ```
-/plugin marketplace add C:\path\to\agent-skills
-/plugin install jira@mcnamee-agent-skills
+/plugin marketplace add C:\path\to\skills
+/plugin install jira@mcnamee-skills
 ```
 
 The plugin prompts for nothing at install time. Set these in the `env` block of

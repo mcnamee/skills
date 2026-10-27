@@ -176,8 +176,8 @@ INSTALLING INTO CLAUDE CODE
     This server ships as the "excel" Claude Code plugin (its manifest is
     .claude-plugin/plugin.json next to this file), so the normal install is:
 
-      /plugin marketplace add C:\path\to\agent-skills
-      /plugin install excel@mcnamee-agent-skills
+      /plugin marketplace add C:\path\to\skills
+      /plugin install excel@mcnamee-skills
 
     It prompts for nothing: the interpreter and the workbook folder come from
     the environment variables above. PYTHONUTF8=1 is set for you by the

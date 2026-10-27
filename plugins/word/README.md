@@ -13,8 +13,8 @@ native Word styles, and filling out templates.
 ## Install
 
 ```
-/plugin marketplace add C:\path\to\agent-skills
-/plugin install word@mcnamee-agent-skills
+/plugin marketplace add C:\path\to\skills
+/plugin install word@mcnamee-skills
 ```
 
 The `/word:word` skill is installed with the server. The plugin prompts for

@@ -11,7 +11,7 @@
   //
   // Everything is configured in this one file - no environment variables.
   //   - Paths: find-and-replace C:/path/to/python.exe with your python.exe,
-  //     and H:/Agent-Skills with your clone if it lives elsewhere. Write
+  //     and H:/Skills with your clone if it lives elsewhere. Write
   //     paths with forward slashes (C:/Python312/python.exe); a backslash must
   //     be doubled (C:\\Python312\\python.exe), because this is JSON.
   //   - Settings: fill in the "environment" block of each server you use.
@@ -53,7 +53,7 @@
   // folders (~/.claude/skills, ~/.config/opencode/skills) rather than
   // replacing them.
   "skills": {
-    "paths": ["H:/Agent-Skills/plugins", "H:/Eva/.claude/skills"]
+    "paths": ["H:/Skills/plugins", "H:/Eva/.claude/skills"]
   },
 
   // One entry per plugin, named as in Claude Code so the tool names match.
@@ -70,7 +70,7 @@
   "mcp": {
     "word": {
       "type": "local",
-      "command": ["C:/path/to/python.exe", "H:/Agent-Skills/plugins/word/word.py"],
+      "command": ["C:/path/to/python.exe", "H:/Skills/plugins/word/word.py"],
       "environment": {
         "PYTHONUTF8": "1",
         // Name stamped on Word tracked changes, e.g. your own name.
@@ -86,7 +86,7 @@
     },
     "powerpoint": {
       "type": "local",
-      "command": ["C:/path/to/python.exe", "H:/Agent-Skills/plugins/powerpoint/powerpoint.py"],
+      "command": ["C:/path/to/python.exe", "H:/Skills/plugins/powerpoint/powerpoint.py"],
       "environment": {
         "PYTHONUTF8": "1",
         // Folder overrides (default H:/Eva/documents/powerpoint,
@@ -101,7 +101,7 @@
     },
     "excel": {
       "type": "local",
-      "command": ["C:/path/to/python.exe", "H:/Agent-Skills/plugins/excel/excel.py"],
+      "command": ["C:/path/to/python.exe", "H:/Skills/plugins/excel/excel.py"],
       "environment": {
         "PYTHONUTF8": "1",
         // Folder override (default H:/Eva/documents/excel).
@@ -112,7 +112,7 @@
     },
     "outlook": {
       "type": "local",
-      "command": ["C:/path/to/python.exe", "H:/Agent-Skills/plugins/outlook/outlook.py"],
+      "command": ["C:/path/to/python.exe", "H:/Skills/plugins/outlook/outlook.py"],
       // Each of these is optional; what they accept is in plugins/outlook/README.md.
       "environment": {
         "PYTHONUTF8": "1",
@@ -149,7 +149,7 @@
     },
     "confluence": {
       "type": "local",
-      "command": ["C:/path/to/python.exe", "H:/Agent-Skills/plugins/confluence/confluence.py"],
+      "command": ["C:/path/to/python.exe", "H:/Skills/plugins/confluence/confluence.py"],
       // BASE_URL and TOKEN (or USER + PASSWORD) are required; the _2 lines add
       // a second instance. The rest are optional - see
       // plugins/confluence/README.md.
@@ -189,7 +189,7 @@
     },
     "jira": {
       "type": "local",
-      "command": ["C:/path/to/python.exe", "H:/Agent-Skills/plugins/jira/jira.py"],
+      "command": ["C:/path/to/python.exe", "H:/Skills/plugins/jira/jira.py"],
       // BASE_URL and TOKEN (or USER + PASSWORD) are required; PROJECTS is an
       // optional allowlist. The rest are optional - see plugins/jira/README.md.
       "environment": {
@@ -218,7 +218,7 @@
     },
     "knowledge-base": {
       "type": "local",
-      "command": ["C:/path/to/python.exe", "H:/Agent-Skills/plugins/knowledge-base/knowledge-base.py"],
+      "command": ["C:/path/to/python.exe", "H:/Skills/plugins/knowledge-base/knowledge-base.py"],
       // Your embeddings endpoint (KB_EMBED_URL is required). Everything after
       // the first three is optional - see plugins/knowledge-base/README.md.
       "environment": {
@@ -270,7 +270,7 @@
     },
     "pdf2md": {
       "type": "local",
-      "command": ["C:/path/to/python.exe", "H:/Agent-Skills/plugins/pdf-to-md/pdf-to-md.py"],
+      "command": ["C:/path/to/python.exe", "H:/Skills/plugins/pdf-to-md/pdf-to-md.py"],
       "environment": {
         "PYTHONUTF8": "1",
         // Tuning: "1" converts PDFs in sub-folders too; "1" keeps image

@@ -196,8 +196,8 @@ INSTALLING INTO CLAUDE CODE
 This server ships as the "knowledge-base" Claude Code plugin (its manifest is
 .claude-plugin/plugin.json next to this file), so the normal install is:
 
-    /plugin marketplace add C:\\path\\to\\agent-skills
-    /plugin install knowledge-base@mcnamee-agent-skills
+    /plugin marketplace add C:\\path\\to\\skills
+    /plugin install knowledge-base@mcnamee-skills
 
 The plugin prompts for nothing at install. Every setting is an environment
 variable the server inherits from Claude Code: set them in the "env" block of

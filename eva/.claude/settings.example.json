@@ -1,22 +1,22 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "extraKnownMarketplaces": {
-    "mcnamee-agent-skills": {
+    "mcnamee-skills": {
       "source": {
         "source": "directory",
-        "path": "H:\\Agent-Skills"
+        "path": "H:\\Skills"
       }
     }
   },
   "enabledPlugins": {
-    "word@mcnamee-agent-skills": true,
-    "powerpoint@mcnamee-agent-skills": true,
-    "excel@mcnamee-agent-skills": true,
-    "outlook@mcnamee-agent-skills": true,
-    "confluence@mcnamee-agent-skills": true,
-    "jira@mcnamee-agent-skills": true,
-    "knowledge-base@mcnamee-agent-skills": true,
-    "pdf-to-md@mcnamee-agent-skills": true
+    "word@mcnamee-skills": true,
+    "powerpoint@mcnamee-skills": true,
+    "excel@mcnamee-skills": true,
+    "outlook@mcnamee-skills": true,
+    "confluence@mcnamee-skills": true,
+    "jira@mcnamee-skills": true,
+    "knowledge-base@mcnamee-skills": true,
+    "pdf-to-md@mcnamee-skills": true
   },
   "env": {
     "EVA_PYTHON": "C:\\path\\to\\python.exe",

@@ -28,8 +28,8 @@ its **last refresh**; the reply gives that date. Reading can't refresh a pivot
 ## Install
 
 ```
-/plugin marketplace add C:\path\to\agent-skills
-/plugin install excel@mcnamee-agent-skills
+/plugin marketplace add C:\path\to\skills
+/plugin install excel@mcnamee-skills
 ```
 
 This is the simplest plugin in the suite - standard library only, no prompts at

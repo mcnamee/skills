@@ -772,8 +772,8 @@ INSTALLING INTO CLAUDE CODE
 This server ships as the "outlook" Claude Code plugin (its manifest is
 .claude-plugin/plugin.json next to this file), so the normal install is:
 
-    /plugin marketplace add C:\path\to\agent-skills
-    /plugin install outlook@mcnamee-agent-skills
+    /plugin marketplace add C:\path\to\skills
+    /plugin install outlook@mcnamee-skills
 
 The plugin prompts for nothing at install: the interpreter, the folders and
 every server-specific setting come from the environment variables above (the

@@ -15,8 +15,8 @@ rule**.
 ## Install
 
 ```
-/plugin marketplace add C:\path\to\agent-skills
-/plugin install powerpoint@mcnamee-agent-skills
+/plugin marketplace add C:\path\to\skills
+/plugin install powerpoint@mcnamee-skills
 ```
 
 All three skills are installed with the server. Claude Code prompts for nothing -

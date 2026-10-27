@@ -118,8 +118,8 @@ INSTALLING INTO CLAUDE CODE
 This server ships as the "jira" Claude Code plugin (its manifest is
 .claude-plugin/plugin.json next to this file), so the normal install is:
 
-    /plugin marketplace add C:\path\to\agent-skills
-    /plugin install jira@mcnamee-agent-skills
+    /plugin marketplace add C:\path\to\skills
+    /plugin install jira@mcnamee-skills
 
 The plugin prompts for nothing at install time: the server inherits every
 setting from the environment Claude Code runs in. Set the variables in the

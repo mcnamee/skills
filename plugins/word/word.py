@@ -247,8 +247,8 @@ WHAT IT CANNOT DO
     This server ships as the "word" Claude Code plugin (its manifest is
     .claude-plugin/plugin.json next to this file), so the normal install is:
 
-        /plugin marketplace add C:\path\to\agent-skills
-        /plugin install word@mcnamee-agent-skills
+        /plugin marketplace add C:\path\to\skills
+        /plugin install word@mcnamee-skills
 
     It prompts for nothing at install: the interpreter, all three folders and
     MSWORD_AUTHOR come from the environment variables above (settings.json

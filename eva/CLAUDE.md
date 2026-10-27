@@ -2,7 +2,7 @@
 
 > These are Eva's instructions on the endpoint, at `H:\Eva\CLAUDE.md`. They are
 > loaded whenever Claude Code runs in this folder. They do **not** govern
-> development work in the `agent-skills` repo, which follows that repo's own
+> development work in the `skills` repo, which follows that repo's own
 > `CLAUDE.md`.
 
 ## Who Eva is

@@ -54,7 +54,7 @@
     "    instance; anything that does not name a server uses the first. Each",
     "    instance needs its own token.",
     "  - Run each server's --check before wiring it in, e.g.",
-    "      & $env:EVA_PYTHON C:\\path\\to\\agent-skills\\plugins\\word\\word.py --check",
+    "      & $env:EVA_PYTHON C:\\path\\to\\skills\\plugins\\word\\word.py --check",
     "",
     "The recommended install is the Claude Code plugin route instead - see the",
     "root README.md. This file is the manual, project-scoped alternative.",
@@ -63,22 +63,22 @@
   "mcpServers": {
     "word": {
       "command": "${EVA_PYTHON}",
-      "args": ["C:\\path\\to\\agent-skills\\plugins\\word\\word.py"],
+      "args": ["C:\\path\\to\\skills\\plugins\\word\\word.py"],
       "env": { "PYTHONUTF8": "1", "MSWORD_AUTHOR": "Matt" }
     },
     "powerpoint": {
       "command": "${EVA_PYTHON}",
-      "args": ["C:\\path\\to\\agent-skills\\plugins\\powerpoint\\powerpoint.py"],
+      "args": ["C:\\path\\to\\skills\\plugins\\powerpoint\\powerpoint.py"],
       "env": { "PYTHONUTF8": "1" }
     },
     "excel": {
       "command": "${EVA_PYTHON}",
-      "args": ["C:\\path\\to\\agent-skills\\plugins\\excel\\excel.py"],
+      "args": ["C:\\path\\to\\skills\\plugins\\excel\\excel.py"],
       "env": { "PYTHONUTF8": "1" }
     },
     "outlook": {
       "command": "${EVA_PYTHON}",
-      "args": ["C:\\path\\to\\agent-skills\\plugins\\outlook\\outlook.py"],
+      "args": ["C:\\path\\to\\skills\\plugins\\outlook\\outlook.py"],
       "env": {
         "PYTHONUTF8": "1",
         "OUTLOOK_SEARCH_FOLDERS": "Inbox,Sent Items,Archive",
@@ -89,7 +89,7 @@
     },
     "confluence": {
       "command": "${EVA_PYTHON}",
-      "args": ["C:\\path\\to\\agent-skills\\plugins\\confluence\\confluence.py"],
+      "args": ["C:\\path\\to\\skills\\plugins\\confluence\\confluence.py"],
       "env": {
         "PYTHONUTF8": "1",
         "CONFLUENCE_MAX_BODY": "20000",
@@ -103,7 +103,7 @@
     },
     "jira": {
       "command": "${EVA_PYTHON}",
-      "args": ["C:\\path\\to\\agent-skills\\plugins\\jira\\jira.py"],
+      "args": ["C:\\path\\to\\skills\\plugins\\jira\\jira.py"],
       "env": {
         "PYTHONUTF8": "1",
         "JIRA_BASE_URL": "https://jira.internal.example.com",
@@ -113,7 +113,7 @@
     },
     "knowledge-base": {
       "command": "${EVA_PYTHON}",
-      "args": ["C:\\path\\to\\agent-skills\\plugins\\knowledge-base\\knowledge-base.py"],
+      "args": ["C:\\path\\to\\skills\\plugins\\knowledge-base\\knowledge-base.py"],
       "env": {
         "PYTHONUTF8": "1",
         "KB_INDEX_DIR": "H:\\Eva\\index",
@@ -124,7 +124,7 @@
     },
     "pdf2md": {
       "command": "${EVA_PYTHON}",
-      "args": ["C:\\path\\to\\agent-skills\\plugins\\pdf-to-md\\pdf-to-md.py"],
+      "args": ["C:\\path\\to\\skills\\plugins\\pdf-to-md\\pdf-to-md.py"],
       "env": { "PYTHONUTF8": "1" }
     }
   }

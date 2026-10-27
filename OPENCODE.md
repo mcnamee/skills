@@ -23,7 +23,7 @@ change of endpoint. (OpenCode's global config, under `%USERPROFILE%\.config`,
 does not, so nothing here uses it.)
 
 Everything below is **Windows / PowerShell**, and assumes the repo is cloned at
-`H:\Agent-Skills`.
+`H:\Skills`.
 
 ## 1. Lay out the working folder
 
@@ -53,7 +53,7 @@ template, so your filled-in copy is never overwritten. (Compare the two after a
 
 - `C:/path/to/python.exe` with the `python.exe` from step 2 (it appears once
   per server)
-- `H:/Agent-Skills`, only if your clone lives somewhere else
+- `H:/Skills`, only if your clone lives somewhere else
 
 Write paths with **forward slashes** (`C:/Python312/python.exe`). This is a JSON
 file, so a single backslash is an escape character: `C:\Python312` fails to
@@ -114,7 +114,7 @@ Every server starts enabled. For any plugin whose pip dependencies you skipped
 
 Nothing to install. The config's `skills.paths` names both skill folders:
 
-- `H:/Agent-Skills/plugins` - every plugin's skill, read straight from your
+- `H:/Skills/plugins` - every plugin's skill, read straight from your
   clone, so a `git pull` is all it takes to update them
 - `H:/Eva/.claude/skills` - the **standalone skills** (`brief-writer`,
   `email-writer`, `exemplar-writer`, `polish`, `unslop`), which arrive with the
@@ -139,7 +139,7 @@ keeps only one, and which one isn't guaranteed.
 Run a server's `--check` to confirm the Python path and its pip packages:
 
 ```powershell
-& C:\path\to\python.exe H:\Agent-Skills\plugins\word\word.py --check
+& C:\path\to\python.exe H:\Skills\plugins\word\word.py --check
 ```
 
 This works as-is for `word`, `powerpoint`, `excel`, `outlook` and `pdf-to-md`.

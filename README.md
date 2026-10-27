@@ -1,4 +1,4 @@
-# Agent Skills
+# Skills
 
 Three things for an AI agent harness (Claude Code first, with OpenCode
 supported too), all working **entirely offline**:
@@ -124,7 +124,7 @@ does not expand — it's `$env:VAR`.
 `H:\Eva`:
 
 ```powershell
-Copy-Item -Recurse C:\path\to\agent-skills\eva H:\Eva
+Copy-Item -Recurse C:\path\to\skills\eva H:\Eva
 ```
 
 That one step creates every folder the servers need, correctly related to each
@@ -190,9 +190,9 @@ Or as Windows user variables, which every plugin picks up just the same:
 These are slash commands, typed inside Claude Code — not shell commands:
 
 ```
-/plugin marketplace add C:\path\to\agent-skills
-/plugin install word@mcnamee-agent-skills
-/plugin install excel@mcnamee-agent-skills
+/plugin marketplace add C:\path\to\skills
+/plugin install word@mcnamee-skills
+/plugin install excel@mcnamee-skills
 ```
 
 There are **no install prompts** for any plugin. What is genuinely one
@@ -259,7 +259,7 @@ names from each server's `environment` block instead - see
 
 Useful commands: `/plugin` to browse and manage, `/mcp` to confirm a server
 connected, `claude mcp list` to spot an unresolved environment variable, and
-`/plugin marketplace update mcnamee-agent-skills` after you transfer a new
+`/plugin marketplace update mcnamee-skills` after you transfer a new
 version across.
 
 `claude mcp list` is the quickest check that step 3 took: it prints the command
@@ -285,7 +285,7 @@ HTTP servers) without starting the server, and is far easier to read than an MCP
 connection failure:
 
 ```powershell
-& $env:EVA_PYTHON C:\path\to\agent-skills\plugins\word\word.py --check
+& $env:EVA_PYTHON C:\path\to\skills\plugins\word\word.py --check
 ```
 
 It prints the folders it resolved and says whether each came from your
@@ -304,7 +304,7 @@ stdio JSON stream on non-ASCII content. Pass secrets with `-e` / the `env` block
 never as flags.
 
 ```powershell
-claude mcp add excel --scope user -e PYTHONUTF8=1 -e EXCEL_DOCS_DIR=C:\path\to\your\workbooks -- $env:EVA_PYTHON C:\path\to\agent-skills\plugins\excel\excel.py
+claude mcp add excel --scope user -e PYTHONUTF8=1 -e EXCEL_DOCS_DIR=C:\path\to\your\workbooks -- $env:EVA_PYTHON C:\path\to\skills\plugins\excel\excel.py
 ```
 
 (No `&` needed there — `claude` is unquoted, so PowerShell treats it as a

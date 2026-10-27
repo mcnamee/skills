@@ -65,7 +65,7 @@ one - `-Force` overwrites the skill's files and leaves your exemplars alone,
 because the clone has none to copy:
 
 ```powershell
-Copy-Item -Recurse -Force C:\path\to\agent-skills\eva\.claude\skills\unslop H:\Eva\.claude\skills\
+Copy-Item -Recurse -Force C:\path\to\skills\eva\.claude\skills\unslop H:\Eva\.claude\skills\
 ```
 
 To remove one:

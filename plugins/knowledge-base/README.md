@@ -36,8 +36,8 @@ local ChromaDB vector index plus your own embeddings API.
 ## Install
 
 ```
-/plugin marketplace add C:\path\to\agent-skills
-/plugin install knowledge-base@mcnamee-agent-skills
+/plugin marketplace add C:\path\to\skills
+/plugin install knowledge-base@mcnamee-skills
 ```
 
 The plugin prompts for nothing at install. Every setting is an environment

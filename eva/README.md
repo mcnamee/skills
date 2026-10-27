@@ -10,7 +10,7 @@ plugin in this repo lines up with it - with nothing left to configure but your
 API keys and Confluence/Jira URLs.
 
 ```powershell
-Copy-Item -Recurse C:\path\to\agent-skills\eva H:\Eva
+Copy-Item -Recurse C:\path\to\skills\eva H:\Eva
 
 [Environment]::SetEnvironmentVariable("EVA_PYTHON",        "C:\Python311\python.exe",        "User")
 [Environment]::SetEnvironmentVariable("EVA_DOCUMENTS_DIR", "H:\Eva\documents",               "User")

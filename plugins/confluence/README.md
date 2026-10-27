@@ -19,8 +19,8 @@ layout, panels and colours survive the update.
 ## Install
 
 ```
-/plugin marketplace add C:\path\to\agent-skills
-/plugin install confluence@mcnamee-agent-skills
+/plugin marketplace add C:\path\to\skills
+/plugin install confluence@mcnamee-skills
 ```
 
 The plugin prompts for nothing at install. Every setting is an environment

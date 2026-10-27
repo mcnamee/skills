@@ -52,7 +52,7 @@ use a different format - see [`OPENCODE.md`](../../../OPENCODE.md).
 To update one without re-copying the whole tree:
 
 ```powershell
-Copy-Item -Force C:\path\to\agent-skills\eva\.claude\agents\researcher.md H:\Eva\.claude\agents\
+Copy-Item -Force C:\path\to\skills\eva\.claude\agents\researcher.md H:\Eva\.claude\agents\
 ```
 
 To remove one:

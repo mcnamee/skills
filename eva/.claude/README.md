@@ -24,8 +24,8 @@ Copy-Item H:\Eva\.claude\settings.example.json H:\Eva\.claude\settings.local.jso
 Re-copying `eva\` later only replaces the template, never your
 `settings.local.json`. What it does, key by key:
 
-- **`extraKnownMarketplaces`** registers your clone (`H:\Agent-Skills`) as the
-  `mcnamee-agent-skills` marketplace, so there is no `/plugin marketplace add`
+- **`extraKnownMarketplaces`** registers your clone (`H:\Skills`) as the
+  `mcnamee-skills` marketplace, so there is no `/plugin marketplace add`
   to type. Change the `path` if your clone lives elsewhere.
 - **`enabledPlugins`** turns on all eight plugins, and with them every plugin
   skill (`/word:word`, `/outlook:meeting-scheduler`, `/powerpoint:slide-deck`
@@ -40,7 +40,7 @@ Re-copying `eva\` later only replaces the template, never your
 Claude Code applies the marketplace and most `env` values only once you accept
 the workspace trust prompt for `H:\Eva`, so open Claude Code there and say yes.
 Then quit and reopen it once, and check with `/plugin` and `/mcp`. If a plugin
-shows as enabled but not installed, run `/plugin install <name>@mcnamee-agent-skills`.
+shows as enabled but not installed, run `/plugin install <name>@mcnamee-skills`.
 
 Three things to know:
 

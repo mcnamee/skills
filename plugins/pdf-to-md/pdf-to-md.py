@@ -89,8 +89,8 @@ flags this server takes are --check and --version.
 This server ships as the "pdf-to-md" Claude Code plugin (its manifest is
 .claude-plugin/plugin.json next to this file), so the normal install is:
 
-    /plugin marketplace add C:\path\to\agent-skills
-    /plugin install pdf-to-md@mcnamee-agent-skills
+    /plugin marketplace add C:\path\to\skills
+    /plugin install pdf-to-md@mcnamee-skills
 
 It prompts for nothing: the interpreter and both folders come from the
 environment variables above. PYTHONUTF8=1 (which prevents stdout encoding
