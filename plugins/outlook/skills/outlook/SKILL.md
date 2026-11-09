@@ -132,7 +132,7 @@ effort - that is the point.
 
 ## Printing a day planner
 
-`outlook_print_calendar` writes an A4 landscape PDF into `H:\Eva\documents\pdf`
+`outlook_print_calendar` writes an A4 landscape PDF into `H:\Eva\printouts`
 and reports the path plus what is on the page. It is a bifold: the day on an
 hour-by-hour timeline down the left half, the following days summarised on the
 right. By default the page uses the top four fifths of the sheet, so the blank

@@ -95,7 +95,7 @@ source material with something invented.
 | [**word**](plugins/word) | 10.0.2 | Read, edit and create `.docx` — real Word tracked changes, native styles, filling out templates | `python-docx` |
 | [**powerpoint**](plugins/powerpoint) | 6.0.2 | Build sectioned `.pptx` decks that inherit your own template's layouts and theme, with formatted speaker notes, audited against the 10/20/30 rule | `python-pptx` |
 | [**excel**](plugins/excel) | 6.1.1 | Read and analyse workbooks - sheets, Tables by name, pivot tables - by parsing `.xlsx` directly; write cells and Table rows and create real PivotTables through Excel | _none_ (`pywin32` to write) |
-| [**outlook**](plugins/outlook) | 11.8.0 | Read local Outlook mail and calendar via COM, with a content blacklist; schedules a meeting (fuzzy directory search, free/busy, and an **unsent** draft you send yourself); when switched on, adds a list of your own appointments straight into the calendar; opens an agreed email or reply in Outlook as an **unsent** draft, with your signature; prints a day as an A4 PDF planner in your own category colours (with up to four colleagues' calendars on the back), prints your team's open tasks from Confluence and the emails you sent with a due date as a double-sided sheet, and saves an email to the knowledge base when you ask | `pywin32` |
+| [**outlook**](plugins/outlook) | 12.0.0 | Read local Outlook mail and calendar via COM, with a content blacklist; schedules a meeting (fuzzy directory search, free/busy, and an **unsent** draft you send yourself); when switched on, adds a list of your own appointments straight into the calendar; opens an agreed email or reply in Outlook as an **unsent** draft, with your signature; prints a day as an A4 PDF planner in your own category colours (with up to four colleagues' calendars on the back), prints your team's open tasks from Confluence and the emails you sent with a due date as a double-sided sheet, and saves an email to the knowledge base when you ask | `pywin32` |
 | [**confluence**](plugins/confluence) | 8.0.1 | Search and read Confluence pages, across one or two instances, with macro content included; download attachments into the folder the matching plugin reads; saves a page to the knowledge base when you ask; when switched on, create pages, change figures, dates and statuses in place without breaking a page's design, update one section, edit a table's figures in place (even inside a table filter or column macro), append, and upload an attachment (replacing an image on a page) | _none_ |
 | [**jira**](plugins/jira) | 3.4.3 | Query issues, sprints and projects; when switched on, create, edit, comment on and transition issues (Jira Data Center v2 API) | _none_ |
 | [**knowledge-base**](plugins/knowledge-base) | 6.0.1 | True RAG over your own Markdown: local ChromaDB index + your embeddings API, and capture notes back into it | `chromadb` |
@@ -380,13 +380,15 @@ H:\Eva\
 │  ├─ word\            .docx (searched recursively)
 │  ├─ powerpoint\      .pptx (searched recursively)
 │  ├─ excel\           .xlsx (top level only - excel does not recurse)
-│  ├─ pdf\             source PDFs, and day planners outlook printed
+│  ├─ pdf\             source PDFs, converted by pdf-to-md
 │  └─ images\          org charts /org-chart draws (.svg), and images
 │                      (confluence downloads attachments into these five too,
 │                      and uploads only from them)
-└─ templates\        blank branded files new documents/decks start from
-   ├─ word\             .docx templates         (read-only)
-   └─ powerpoint\       .pptx / .potx templates (read-only)
+├─ templates\        blank branded files new documents/decks start from
+│  ├─ word\             .docx templates         (read-only)
+│  └─ powerpoint\       .pptx / .potx templates (read-only)
+└─ printouts\        day planners and team task sheets outlook prints - throwaway,
+                     kept out of documents\ so pdf-to-md never converts them
 ```
 
 Three environment variables name the three roots; the plugin's own name is the
@@ -398,7 +400,7 @@ sub-folder. **Every folder listed here must exist.**
 | `powerpoint` | `powerpoint\` | `powerpoint\` | `powerpoint\` |
 | `excel` | `excel\` | — | — |
 | `pdf-to-md` | `pdf\` | — | `pdf\` |
-| `outlook` | `pdf\` (printed planners) | — | `email\` |
+| `outlook` | — (prints into `printouts\`, beside the documents root) | — | `email\` |
 | `confluence` | `excel\`, `word\`, `powerpoint\`, `pdf\` (downloaded attachments, by type) | — | `confluence\` |
 | `knowledge-base` | — | — | the **whole root** it indexes, plus `captures\` |
 | `jira` | — | — | — |
@@ -450,7 +452,7 @@ three shared roots, and those folders are **required**:
 | `knowledge-base` | Reads the documents folder; writes its vector index (`H:\Eva\index`) and captured notes (`H:\Eva\knowledge\captures`, always inside the documents folder); never edits or deletes an existing document; network only to the endpoints you configure |
 | `pdf-to-md` | Reads the PDF folder, writes the output folder |
 | `confluence` | Writes the knowledge-base folder only for a page you asked to keep (`save_to_kb`) or a Markdown attachment you downloaded, and the per-type documents folders only for an attachment you asked it to download - never replacing a file already there unless told to. Reading a page saves nothing. Set `CONFLUENCE_KB_DIR` and `CONFLUENCE_DOCS_DIR` to `off` and the server touches no local file |
-| `outlook` | Reads no local folder at all. Writes two, both only when asked: the knowledge-base folder for an email you asked to keep (`save_to_kb`), and the PDF folder for a day planner you asked it to print. Reading mail saves nothing, and a blacklisted message or meeting is never written at all. Set both folders to `off` and the server touches no local file. In the mailbox it can never send, accept, move or delete; its writes there are **unsent** meeting and email drafts you review and send yourself (`OUTLOOK_ALLOW_DRAFTS=false` removes both) and, only with `OUTLOOK_ALLOW_WRITE=true`, your own appointments with nobody invited |
+| `outlook` | Reads no local folder at all. Writes two, both only when asked: the knowledge-base folder for an email you asked to keep (`save_to_kb`), and the printouts folder (`H:\Eva\printouts`) for a day planner or task sheet you asked it to print. Reading mail saves nothing, and a blacklisted message or meeting is never written at all. Set both folders to `off` and the server touches no local file. In the mailbox it can never send, accept, move or delete; its writes there are **unsent** meeting and email drafts you review and send yourself (`OUTLOOK_ALLOW_DRAFTS=false` removes both) and, only with `OUTLOOK_ALLOW_WRITE=true`, your own appointments with nobody invited |
 | `jira` | None. HTTP GET to Jira only, unless `JIRA_ALLOW_WRITE=true` adds the write tools |
 
 Paths are resolved (symlinks included) before the containment check, so a

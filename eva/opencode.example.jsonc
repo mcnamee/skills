@@ -141,7 +141,7 @@
         "OUTLOOK_CA_CERT": "",
         "OUTLOOK_VERIFY_SSL": "",
         // Folder overrides (default H:/Eva/knowledge/email for saved email,
-        // H:/Eva/documents/pdf for printed planners). Both also take "off".
+        // H:/Eva/printouts for printed planners and task sheets). Both also take "off".
         "OUTLOOK_KB_DIR": "",
         "OUTLOOK_DOCS_DIR": ""
       },

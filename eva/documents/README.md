@@ -14,13 +14,13 @@ plugin appends its own name, so there is no per-plugin folder setting.
 | [`word\`](word) | `word` | yes — searched recursively |
 | [`powerpoint\`](powerpoint) | `powerpoint` | yes — searched recursively |
 | [`excel\`](excel) | `excel` | **no** — top level only |
-| [`pdf\`](pdf) | `pdf-to-md` (and `outlook`, which prints day planners here) | only with `PDF2MD_RECURSIVE=1` |
+| [`pdf\`](pdf) | `pdf-to-md` | only with `PDF2MD_RECURSIVE=1` |
 | [`images\`](images) | no plugin of its own - the `/org-chart` skill writes here, and `confluence` downloads and uploads images here | n/a |
 
 Each of the first four **must exist** for its plugin to start (`word`, `powerpoint` and
-`excel` refuse to run without their folder; `pdf-to-md` reports it on `--check`,
-and `outlook` starts anyway and disables printing, since mail has to stay
-readable either way).
+`excel` refuse to run without their folder; `pdf-to-md` reports it on `--check`).
+`outlook`'s printed planners and task sheets do not come here at all: they go to
+[`..\printouts`](../printouts), beside this folder, so `pdf-to-md` never converts them.
 
 Each of these folders is a **sandbox**: the plugin resolves every path against
 it (symlinks included) and refuses anything that lands outside. `word` can

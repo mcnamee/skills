@@ -1,15 +1,16 @@
 # documents\pdf\
 
 The PDF folder: source PDFs for the `pdf-to-md` plugin to convert into the
-knowledge base, the day planners and team task sheets the `outlook` plugin
-prints, and PDFs the
-`confluence` plugin downloads from a page's attachments.
+knowledge base, and PDFs the `confluence` plugin downloads from a page's
+attachments. The day planners and team task sheets `outlook` prints do NOT come
+here - they go to [`..\..\printouts`](../../printouts), so they are never
+converted.
 
 | | |
 |---|---|
-| **Setting** | `EVA_DOCUMENTS_DIR` (the `pdf-to-md`, `outlook` and `confluence` plugins all append `\pdf`) |
+| **Setting** | `EVA_DOCUMENTS_DIR` (the `pdf-to-md` and `confluence` plugins both append `\pdf`) |
 | **Default** | `H:\Eva\documents\pdf` |
-| **Access** | `pdf-to-md` reads only — conversion never alters a PDF. `outlook` writes day planners and task sheets here, and `confluence` downloaded attachments; neither touches anything else, and neither replaces an existing file unless asked |
+| **Access** | `pdf-to-md` reads only — conversion never alters a PDF. `confluence` writes downloaded attachments here, touches nothing else, and never replaces an existing file unless asked |
 | **Output** | [`..\..\knowledge\pdf`](../../knowledge/pdf) |
 
 Conversion preserves reading order, headings and tables, including borderless
@@ -29,24 +30,13 @@ it does so quietly. If a converted file looks suspiciously thin, open the PDF
 and check whether its text is selectable. Getting a scan into the knowledge base
 means OCRing it elsewhere first.
 
-## Printed day planners
+## Printed day planners are not here
 
-Ask for "today's printable calendar" or "tomorrow's planner" and `outlook` writes
-`Calendar - <date> <weekday>.pdf` here: A4 landscape, the day on an hour-by-hour
-timeline down one half and the following days down the other. It prints on the
-top four fifths of the sheet, so print it single-sided at 100%, fold it in half,
-and fold the blank bottom fifth up behind it to fit a diary (set
-`OUTLOOK_CALENDAR_PAGE_FILL` to change how much is left to fold, or to `off` for
-the whole sheet). Re-printing a day overwrites that day's sheet rather than
-piling up copies.
-
-Ask for "my team's tasks" and it writes `Team Tasks - <date>.pdf` here too:
-eight columns over both sides of an A4 landscape sheet, printed double-sided,
-flip on short edge, using the whole sheet.
-
-Neither is **worth converting**. A bulk `pdf-to-md` run will pick them up along
-with everything else and fill the index with last week's meetings, so tidy old
-sheets out, or set `OUTLOOK_DOCS_DIR` to a folder of its own if you print often.
+Before outlook 12.0.0, day planners (`Calendar - <date> <weekday>.pdf`) and
+team task sheets (`Team Tasks - <date>.pdf`) were printed into this folder, and
+a bulk `pdf-to-md` run converted them into the knowledge base. They now go to
+[`H:\Eva\printouts`](../../printouts). Any old ones still here are safe to
+delete.
 
 ## Where the PDFs stay
 

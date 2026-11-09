@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 r"""
-outlook.py (v11.8.0)
+outlook.py (v12.0.0)
 ======================
 
 A single-file MCP (Model Context Protocol) server giving an LLM near-read-only
@@ -505,7 +505,7 @@ count. This differs from outlook_get_calendar, which reads the body and
 withholds a matching event outright - that tool's whole output goes to the
 model, so it has more to protect.
 
-The file lands in the documents folder below and an existing file of the same
+The file lands in the printouts folder below and an existing file of the same
 name is overwritten, so re-printing a day replaces that day's sheet rather than
 piling up copies.
 
@@ -553,7 +553,7 @@ tools and the model in the middle:
    the columns are made from the names on the tasks, in the order they first
    appear.
 
-The PDF lands in the same documents folder as the planner, as
+The PDF lands in the same printouts folder as the planner, as
 "Team Tasks - <date>.pdf"; re-printing the same day overwrites it. The skill
 outlook:team-tasks carries the whole workflow.
 
@@ -680,7 +680,8 @@ This server uses three of the four suite-wide variables:
                         installed, e.g. C:\Python311\python.exe (read by the
                         plugin manifest, not by this file)
     EVA_KNOWLEDGE_DIR   root of the RAG corpus (default H:\Eva\knowledge)
-    EVA_DOCUMENTS_DIR   root of the document library (default H:\Eva\documents)
+    EVA_DOCUMENTS_DIR   root of the document library (default H:\Eva\documents);
+                        printouts go in a folder BESIDE it, see below
 
 This server works in one sub-folder of each:
 
@@ -691,13 +692,21 @@ This server works in one sub-folder of each:
                                 THIS FOLDER MUST EXIST - the server will not
                                 start without it.
 
-    %EVA_DOCUMENTS_DIR%\pdf     Where outlook_print_calendar writes the day
-                                planner. The document library is organised by
-                                file type and a printed planner is a PDF, so it
-                                lands beside your own PDFs rather than in an
-                                output folder of its own. Missing is NOT fatal:
-                                the server says so and disables printing, since
-                                mail must stay readable either way.
+And one folder BESIDE the document library, not inside it:
+
+    printouts                   Where outlook_print_calendar and
+                                outlook_print_team_tasks write the day planner
+                                and the team task sheet (v12.0.0): a sibling of
+                                %EVA_DOCUMENTS_DIR%, so H:\Eva\printouts on a
+                                stock install. They used to land in
+                                documents\pdf, where pdf-to-md picked them up
+                                and filled the knowledge base with last week's
+                                meetings; outside documents\ no converter can
+                                reach them. Nothing tidies the folder - delete
+                                old sheets whenever you like. Missing is NOT
+                                fatal: the server says so and disables
+                                printing, since mail must stay readable either
+                                way.
 
 Or, as Windows user environment variables instead of settings.json
 (PowerShell, one-off):
@@ -716,9 +725,11 @@ Server-specific settings, all optional and all environment variables:
                                 after which no email is written to disk.
     OUTLOOK_KB_AUTOSAVE=true    save EVERY email read, without being asked
                                 (off by default - see KB_AUTOSAVE below).
-    OUTLOOK_DOCS_DIR            override the day-planner folder with a full
-                                path of its own, or "off" to forbid printing
-                                entirely.
+    OUTLOOK_DOCS_DIR            override the printouts folder (day planner
+                                and team task sheet) with a full path of its
+                                own, or "off" to forbid printing entirely.
+                                Keep it outside documents\pdf, or pdf-to-md
+                                will convert the printouts.
     OUTLOOK_CALENDAR_HOURS      the working day the printed timeline starts
                                 from, e.g. "7-19" (default "8-18"). It always
                                 stretches to fit anything outside it.
@@ -861,7 +872,7 @@ IMPORTANT (stdio-on-Windows pitfalls)
 
 # Semantic version of this server. Bump on EVERY change (see CLAUDE.md):
 # MAJOR = breaking config/tool change, MINOR = new feature, PATCH = fix.
-__version__ = "11.8.0"
+__version__ = "12.0.0"
 
 import os
 import re
@@ -938,17 +949,20 @@ SUBFOLDER = "email"                      # this server's knowledge sub-folder
 EVA_KNOWLEDGE_DIR = r"H:\Eva\knowledge"  # fallback for the suite-wide root
 KB_DIR = r"H:\Eva\knowledge\email"
 
-# --- 5b. PDF_DIR  (where outlook_print_calendar writes the printable planner).
-#        The ONE folder this server creates documents in. It is the "pdf"
-#        sub-folder of %EVA_DOCUMENTS_DIR%, because the document library is
-#        organised by file type and a printed planner is a PDF - it lands beside
-#        your own PDFs rather than in an output folder of its own.
+# --- 5b. PRINT_DIR  (where the day planner and team task sheet are printed).
+#        The ONE folder this server creates documents in: "printouts", a
+#        SIBLING of %EVA_DOCUMENTS_DIR% (H:\Eva\printouts on a stock install),
+#        not a sub-folder of it. Until v12.0.0 they went to documents\pdf,
+#        where pdf-to-md converted them into the knowledge base; a printout is
+#        a throwaway, not a source document, so it now sits where no converter
+#        looks. There is deliberately no suite-wide variable for it - it
+#        follows EVA_DOCUMENTS_DIR's parent.
 #        RESOLVED FROM THE ENVIRONMENT in main(); the literal here is what a
 #        stock H:\Eva install resolves to. Set OUTLOOK_DOCS_DIR to a full path
 #        of its own, or to "off" to forbid printing entirely.
-DOCS_SUBFOLDER = "pdf"                     # this server's documents sub-folder
+PRINTOUTS_FOLDER = "printouts"              # sibling of the documents root
 EVA_DOCUMENTS_DIR = r"H:\Eva\documents"     # fallback for the suite-wide root
-PDF_DIR = r"H:\Eva\documents\pdf"
+PRINT_DIR = r"H:\Eva\printouts"
 
 # --- 5c. Printable day planner defaults.
 #        CALENDAR_DAY_START_HOUR / CALENDAR_DAY_END_HOUR are the working day the
@@ -1153,14 +1167,16 @@ def resolve_kb_dir():
     return os.path.join(EVA_KNOWLEDGE_DIR, SUBFOLDER)
 
 
-def resolve_pdf_dir():
+def resolve_print_dir():
     """
-    The folder outlook_print_calendar writes the planner into.
+    The folder the day planner and team task sheet are printed into.
 
     Precedence: OUTLOOK_DOCS_DIR (a full path of its own, or one of the
-    DISABLE_KEYWORDS to forbid printing), then EVA_DOCUMENTS_DIR with this
-    server's "pdf" sub-folder appended, then that same sub-folder of the
-    EVA_DOCUMENTS_DIR fallback in the config block. Returns (path, configured):
+    DISABLE_KEYWORDS to forbid printing), then a "printouts" folder BESIDE
+    EVA_DOCUMENTS_DIR (its parent with "printouts" appended), then the same
+    beside the EVA_DOCUMENTS_DIR fallback in the config block. A sibling and
+    not a sub-folder, so pdf-to-md (which converts documents\\pdf, and its
+    sub-folders when recursive) never sees a printout. Returns (path, configured):
     `configured` is False only when nothing was set at all, which is what
     decides whether a missing folder is worth complaining about. Returns
     (None, True) when printing is switched off.
@@ -1172,8 +1188,16 @@ def resolve_pdf_dir():
     if root:
         if root.lower() in DISABLE_KEYWORDS:
             return None, True
-        return os.path.join(root, DOCS_SUBFOLDER), True
-    return os.path.join(EVA_DOCUMENTS_DIR, DOCS_SUBFOLDER), False
+        return _beside(root, PRINTOUTS_FOLDER), True
+    return _beside(EVA_DOCUMENTS_DIR, PRINTOUTS_FOLDER), False
+
+
+def _beside(folder, name):
+    """`name` as a sibling of `folder`: H:\\Eva\\documents -> H:\\Eva\\<name>.
+    Trailing separators are stripped first, or dirname would return the
+    folder itself."""
+    parent = os.path.dirname(os.path.normpath(folder))
+    return os.path.join(parent, name)
 
 
 def parse_category_colours(raw):
@@ -5509,11 +5533,11 @@ def _planner_ahead_days(by_date, day, wanted, skip_empty):
 
 
 def tool_print_calendar(args):
-    if not PDF_DIR:
+    if not PRINT_DIR:
         return ("Error: printing is switched off on this server "
                 "(OUTLOOK_DOCS_DIR is set to off), so no PDF was written. "
                 "Give OUTLOOK_DOCS_DIR a real folder, or unset it to use "
-                "%EVA_DOCUMENTS_DIR%\\{0}.".format(DOCS_SUBFOLDER))
+                "the {0} folder beside %EVA_DOCUMENTS_DIR%.".format(PRINTOUTS_FOLDER))
 
     today = datetime.date.today()
     try:
@@ -5577,11 +5601,11 @@ def tool_print_calendar(args):
     else:
         stem = "Calendar - {0} {1}".format(
             day.isoformat(), _WEEKDAY_NAMES[day.weekday()])
-    path = os.path.join(PDF_DIR, stem + ".pdf")
+    path = os.path.join(PRINT_DIR, stem + ".pdf")
 
     # Re-printing a day overwrites that day's own sheet, which is the point. A
-    # NAMED file is different: the documents folder holds the user's own PDFs
-    # too, and silently replacing one of those would be unforgivable.
+    # NAMED file is different: OUTLOOK_DOCS_DIR may point at a folder of the
+    # user's own PDFs, and silently replacing one of those would be unforgivable.
     if requested and os.path.exists(path):
         return ("Error: {0} already exists and this call named it explicitly, "
                 "so nothing was written - a file you already have must not be "
@@ -5590,13 +5614,13 @@ def tool_print_calendar(args):
                 "its own previous copy.".format(path))
 
     try:
-        os.makedirs(PDF_DIR, exist_ok=True)
+        os.makedirs(PRINT_DIR, exist_ok=True)
         with open(path, "wb") as handle:
             handle.write(pdf)
     except OSError as exc:
         return ("Error: could not write the planner to {0} ({1}). The folder "
-                "comes from OUTLOOK_DOCS_DIR, or %EVA_DOCUMENTS_DIR%\\{2}."
-                .format(path, exc, DOCS_SUBFOLDER))
+                "comes from OUTLOOK_DOCS_DIR, or the {2} folder beside %EVA_DOCUMENTS_DIR%."
+                .format(path, exc, PRINTOUTS_FOLDER))
 
     log("Wrote day planner: {0}".format(path))
 
@@ -6204,7 +6228,7 @@ def tool_get_task_team(args):
                  "have a due date. Undated and completed ones are not tasks. "
                  "Do not read Sent Items.")
     lines.append("Today on this endpoint: {0}.".format(_fmt_day_long(today)))
-    if not PDF_DIR:
+    if not PRINT_DIR:
         lines.append("")
         lines.append("PRINTING IS OFF on this endpoint (OUTLOOK_DOCS_DIR=off): "
                      "outlook_print_team_tasks will refuse. Say so before "
@@ -6386,11 +6410,11 @@ def tool_list_task_emails(args):
 
 
 def tool_print_team_tasks(args):
-    if not PDF_DIR:
+    if not PRINT_DIR:
         return ("Error: printing is switched off on this server "
                 "(OUTLOOK_DOCS_DIR is set to off), so no PDF was written. "
                 "Give OUTLOOK_DOCS_DIR a real folder, or unset it to use "
-                "%EVA_DOCUMENTS_DIR%\\{0}.".format(DOCS_SUBFOLDER))
+                "the {0} folder beside %EVA_DOCUMENTS_DIR%.".format(PRINTOUTS_FOLDER))
     try:
         tasks = _clean_tasks(args.get("tasks"))
     except ValueError as exc:
@@ -6417,7 +6441,7 @@ def tool_print_team_tasks(args):
         stem = safe_filename(os.path.splitext(os.path.basename(requested))[0])
     else:
         stem = "Team Tasks - {0}".format(today.isoformat())
-    path = os.path.join(PDF_DIR, stem + ".pdf")
+    path = os.path.join(PRINT_DIR, stem + ".pdf")
 
     # Same rule as the day planner: re-printing today's sheet replaces it, but
     # a file the call NAMED might be one of the user's own PDFs.
@@ -6427,13 +6451,14 @@ def tool_print_team_tasks(args):
                 "'filename' to write today's sheet, which does overwrite its "
                 "own previous copy.".format(path))
     try:
-        os.makedirs(PDF_DIR, exist_ok=True)
+        os.makedirs(PRINT_DIR, exist_ok=True)
         with open(path, "wb") as handle:
             handle.write(pdf)
     except OSError as exc:
         return ("Error: could not write the task sheet to {0} ({1}). The "
-                "folder comes from OUTLOOK_DOCS_DIR, or %EVA_DOCUMENTS_DIR%\\{2}."
-                .format(path, exc, DOCS_SUBFOLDER))
+                "folder comes from OUTLOOK_DOCS_DIR, or the {2} folder beside "
+                "%EVA_DOCUMENTS_DIR%."
+                .format(path, exc, PRINTOUTS_FOLDER))
     log("Wrote team task sheet: {0}".format(path))
 
     pages = max(1, -(-len(columns) // TASKS_COLUMNS_PER_PAGE))
@@ -8937,7 +8962,7 @@ TOOLS = [
             "or take into a meeting, or 'today's calendar as a PDF'. 'date' accepts "
             "'today' (the default), 'tomorrow', 'yesterday', a day offset like '+2', "
             "or YYYY-MM-DD - prefer the words, because the server uses the endpoint's "
-            "own clock. The file is written into the documents folder and the tool "
+            "own clock. The file is written into the printouts folder and the tool "
             "reports the full path plus what is on the page, including how the sheet "
             "is meant to be folded and printed - repeat that rather than assuming "
             "it. When OUTLOOK_CALENDAR_TEAM is set, the PDF has a second page: up "
@@ -9997,10 +10022,10 @@ def run_check():
         cal = ns.GetDefaultFolder(OL_FOLDER_CALENDAR)
         log("Calendar folder     : {0}".format(cal.Name))
         log("Search folders      : {0}".format(", ".join(_SEARCH_FOLDERS)))
-        if PDF_DIR:
-            log("Planner PDF folder  : {0}".format(PDF_DIR))
+        if PRINT_DIR:
+            log("Printouts folder    : {0}".format(PRINT_DIR))
         else:
-            log("Planner PDF folder  : disabled - outlook_print_calendar is off")
+            log("Printouts folder    : disabled - printing is off")
         log("Planner page fill   : {0}".format(
             "the whole sheet" if PLANNER_CONTENT_FRACTION >= 1.0
             else "top {0:.0f}%, bottom {1:.0f}% blank to fold up".format(
@@ -10072,7 +10097,7 @@ def run_check():
 
 
 def main():
-    global KB_DIR, KB_AUTOSAVE, PDF_DIR, _CATEGORY_COLOURS, _HIDDEN_CATEGORIES
+    global KB_DIR, KB_AUTOSAVE, PRINT_DIR, _CATEGORY_COLOURS, _HIDDEN_CATEGORIES
     global _CALENDAR_TEAM, _TASKS_TEAM, _TASKS_PAGE
     global _EWS_URL, _EWS_VERIFY_SSL, _EWS_CA_CERT
     global CALENDAR_DAY_START_HOUR, CALENDAR_DAY_END_HOUR
@@ -10148,20 +10173,20 @@ def main():
     # Printable day planner. Unlike the knowledge-base folder this is NOT fatal
     # when it cannot be used: printing is one tool, and mail and calendar must
     # still be readable on an endpoint where the document library is missing.
-    PDF_DIR, docs_configured = resolve_pdf_dir()
-    if PDF_DIR:
+    PRINT_DIR, docs_configured = resolve_print_dir()
+    if PRINT_DIR:
         try:
-            os.makedirs(PDF_DIR, exist_ok=True)
-            log("Day planner PDFs -> {0}".format(PDF_DIR))
+            os.makedirs(PRINT_DIR, exist_ok=True)
+            log("Printouts (planner, task sheet) -> {0}".format(PRINT_DIR))
         except OSError as exc:
-            log("WARNING: cannot use the planner folder {0}: {1}".format(PDF_DIR, exc))
+            log("WARNING: cannot use the planner folder {0}: {1}".format(PRINT_DIR, exc))
             log("         It resolves from {0}. outlook_print_calendar is "
                 "disabled until it exists.".format(
-                    "OUTLOOK_DOCS_DIR / EVA_DOCUMENTS_DIR (sub-folder '{0}')".format(
-                        DOCS_SUBFOLDER)
+                    "OUTLOOK_DOCS_DIR / EVA_DOCUMENTS_DIR (the '{0}' folder beside it)".format(
+                        PRINTOUTS_FOLDER)
                     if docs_configured
-                    else "the built-in default {0}".format(PDF_DIR)))
-            PDF_DIR = None
+                    else "the built-in default {0}".format(PRINT_DIR)))
+            PRINT_DIR = None
     else:
         log("Day planner printing disabled (OUTLOOK_DOCS_DIR=off); no PDF is "
             "written")

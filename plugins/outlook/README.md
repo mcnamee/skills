@@ -9,12 +9,12 @@ printable sheet of your team's open tasks.
 
 | | |
 |---|---|
-| **Server** | `outlook.py` v11.8.0 |
+| **Server** | `outlook.py` v12.0.0 |
 | **pip install** | `pywin32` |
 | **Platform** | **Windows only** — requires classic Win32 Outlook (not "New Outlook") installed, running, and logged into a profile |
 | **Sends** | **never.** Not an email, not a reply, not a meeting invitation. It cannot accept, move or delete anything either |
 | **Writes to the mailbox** | two things, both **unsent** drafts you review and send yourself: a meeting in your calendar, and an email (new, reply or forward) opened in Outlook and saved to Drafts (`OUTLOOK_ALLOW_DRAFTS=false` removes both). With `OUTLOOK_ALLOW_WRITE=true`, a third: your own appointments, nobody invited, saved straight into your calendar |
-| **Writes to disk** | only on request: an email saved as Markdown in `H:\Eva\knowledge\email`, or a day planner or team task sheet PDF in `H:\Eva\documents\pdf` |
+| **Writes to disk** | only on request: an email saved as Markdown in `H:\Eva\knowledge\email`, or a day planner or team task sheet PDF in `H:\Eva\printouts` |
 
 ## Install
 
@@ -274,7 +274,7 @@ exactly the agreed text, and leaves the window open for you to edit and send.
 
 Ask for "today's printable calendar", "tomorrow's planner" or "an agenda I can
 take into the meeting" and `outlook_print_calendar` writes an **A4 landscape
-PDF** into `H:\Eva\documents\pdf`. Print it single-sided and fold it in half:
+PDF** into `H:\Eva\printouts`. Print it single-sided and fold it in half:
 the day itself runs down the left panel on an hour-by-hour timeline, the
 following days are summarised on the right. With
 [a team view](#the-team-view-on-the-back) configured it has a second page for
@@ -574,7 +574,7 @@ The `/outlook:team-tasks` skill runs it:
 Without `OUTLOOK_TASKS_TEAM` the columns are made from the names on the tasks,
 in the order they first appear - it works, but the order changes from week to
 week. Without `OUTLOOK_TASKS_PAGE` Claude asks which page to read. The file is
-`H:\Eva\documents\pdf\Team Tasks - <date>.pdf`; re-printing the same day
+`H:\Eva\printouts\Team Tasks - <date>.pdf`; re-printing the same day
 overwrites it.
 
 The sheet needs the **confluence** plugin installed and configured to include
@@ -731,19 +731,19 @@ folder at all; the two below are where it writes, and only when you ask.
 | Folder | What it is for | Missing? |
 |---|---|---|
 | `%EVA_KNOWLEDGE_DIR%\email` | Where `outlook_get_email` saves a message as Markdown **when the call asks for it** (`Email - <date> - <subject> (<id>).md`, overwritten if the same message is saved again), for the `knowledge-base` plugin to index. Blacklisted messages are never written | Created at startup. If it cannot be created the server refuses to start, rather than failing on the first email you ask it to keep |
-| `%EVA_DOCUMENTS_DIR%\pdf` | Where `outlook_print_calendar` writes the day planner (`Calendar - <date> <weekday>.pdf`, overwritten when you re-print that day) | Created at startup. If it cannot be created the server **still starts** and says so; only printing is disabled, so mail and calendar stay readable |
+| `printouts`, beside `%EVA_DOCUMENTS_DIR%` (`H:\Eva\printouts`) | Where `outlook_print_calendar` and `outlook_print_team_tasks` write the day planner (`Calendar - <date> <weekday>.pdf`) and task sheet (`Team Tasks - <date>.pdf`), each overwritten when you re-print that day. Kept out of `documents\` so `pdf-to-md` never converts them | Created at startup. If it cannot be created the server **still starts** and says so; only printing is disabled, so mail and calendar stay readable |
 
 Create them, or copy the repo's [`eva/`](../../eva) folder to `H:\Eva` and they
 both exist.
 
-> **Why `documents\pdf` and not `documents\outlook`?** The document library is
-> organised by **file type**, and a printed planner is a PDF. It lands beside
-> your own PDFs rather than in an output folder of its own, which is the same
-> rule `word` and `powerpoint` follow for the documents they create. Note the
-> `pdf-to-md` plugin also reads that folder: a planner left there will be
-> converted into the knowledge base along with everything else if you run a bulk
-> conversion, which is rarely what you want, so tidy old sheets out or point
-> `OUTLOOK_DOCS_DIR` somewhere of its own.
+> **Why `printouts` and not `documents\pdf`?** Until 12.0.0 printouts went to
+> `documents\pdf`, beside your own PDFs. But `pdf-to-md` converts that folder,
+> so every bulk conversion filled the knowledge base with last week's meetings.
+> A printout is for paper, not a source document, so it now lands in a folder
+> **beside** `documents\` (the parent of `EVA_DOCUMENTS_DIR`, with `printouts`
+> appended) where no converter looks. Nothing tidies it; delete old sheets
+> whenever you like. Upgrading from 11.x: any old planners still in
+> `documents\pdf` stay there until you remove them.
 
 ### Overriding one folder, and this server's own settings
 
@@ -754,7 +754,7 @@ only when an endpoint's layout really differs.
 | Variable | Purpose |
 |---|---|
 | `OUTLOOK_KB_DIR` | Full path to the save folder, instead of `%EVA_KNOWLEDGE_DIR%\email`. `off` forbids saving outright, after which no email is written to disk |
-| `OUTLOOK_DOCS_DIR` | Full path to the folder the day planner and task sheet are printed into, instead of `%EVA_DOCUMENTS_DIR%\pdf`. `off` forbids printing outright |
+| `OUTLOOK_DOCS_DIR` | Full path to the folder the day planner and task sheet are printed into, instead of `printouts` beside `%EVA_DOCUMENTS_DIR%`. Keep it outside `documents\pdf`, or `pdf-to-md` will convert the printouts. `off` forbids printing outright |
 | `OUTLOOK_CALENDAR_HOURS` | The working day the printed timeline starts from, e.g. `7-19` (default `8-18`). It always stretches to fit anything scheduled outside it |
 | `OUTLOOK_CALENDAR_PAGE_FILL` | How much of the sheet's **height** the printed planner uses: a fraction (`0.8`, the default), a percentage (`80` or `80%`), or `off` (`none`, `no`, `false`, `disabled`) for the whole sheet with nothing left to fold. Accepts `0.5` to `1.0`; anything else is refused with a warning and the default kept |
 | `OUTLOOK_CALENDAR_COLOURS` | Overrules the colour Outlook already holds against a category, e.g. `Leadership=purple,Client=green` — see [Category colours](#category-colours). An unknown colour name is ignored with a warning |
@@ -856,7 +856,7 @@ move or delete — `Send()` is never called anywhere in the file, and
 7. "Find everything about the 'Acme renewal' across my Inbox, Sent Items and Archive from the last month." → `outlook_search_recent`
 8. "Search only my 'Projects' and 'Sent Items' folders for anything about the budget review." → `outlook_search_recent` with a `folders` argument overriding the default set
 9. "What are my actual Outlook folder names, so I can point the search at the right archive?" → `outlook_list_folders`
-10. "Give me today's calendar to print." → `outlook_print_calendar` — an A4 landscape day planner in `H:\Eva\documents\pdf`
+10. "Give me today's calendar to print." → `outlook_print_calendar` — an A4 landscape day planner in `H:\Eva\printouts`
 11. "Print tomorrow's planner with the whole week down the side." → `outlook_print_calendar` with `date: "tomorrow"`, `lookahead_days: 6`
 11a. "Print today's calendar, just mine, no team page." → `outlook_print_calendar` with `include_team: false`
 11b. "Print my team's tasks." → `outlook_get_task_team`, the Confluence page and `outlook_list_task_emails`, then `outlook_print_team_tasks` - eight columns over two sides of A4

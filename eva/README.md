@@ -24,7 +24,7 @@ its own name as a sub-folder - `word` reads `documents\word`, writes
 plugin has a folder setting of its own to keep in sync, and there are no folder
 command-line flags at all.
 
-## The four zones
+## The zones
 
 The tree is organised by **what writes to a folder**, not by topic:
 
@@ -34,6 +34,7 @@ The tree is organised by **what writes to a folder**, not by topic:
 | [`index\`](index) | The ChromaDB vector store | `knowledge-base`, from `knowledge\` |
 | [`documents\`](documents) | The binary library — `.docx`, `.pptx`, `.xlsx`, `.pdf`, images | you **and** the assistant |
 | [`templates\`](templates) | Blank branded files a new document is created from — style, not facts | you |
+| [`printouts\`](printouts) | Throwaway PDFs printed to paper — day planners, team task sheets. Never converted or indexed | `outlook` |
 
 ```
 H:\Eva\
@@ -54,13 +55,14 @@ H:\Eva\
 │  ├─ word\            .docx  (searched recursively)
 │  ├─ powerpoint\      .pptx  (searched recursively)
 │  ├─ excel\           .xlsx  (top level only — see its README)
-│  ├─ pdf\             .pdf   source PDFs, and planners outlook printed
+│  ├─ pdf\             .pdf   source PDFs, converted by pdf-to-md
 │  └─ images\          .svg / .png  org charts /org-chart draws, and images
 │                      (confluence downloads attachments into these five too,
 │                      and uploads only from them)
-└─ templates\        blank branded files new documents start from
-   ├─ word\             .docx templates        (read-only)
-   └─ powerpoint\       .pptx / .potx templates (read-only)
+├─ templates\        blank branded files new documents start from
+│  ├─ word\             .docx templates        (read-only)
+│  └─ powerpoint\       .pptx / .potx templates (read-only)
+└─ printouts\        day planners and team task sheets outlook prints - throwaway
 ```
 
 ## The assistant's instructions
@@ -104,7 +106,7 @@ Where each plugin lands, and **which folders must exist**:
 | `powerpoint` | `documents\powerpoint\` | `templates\powerpoint\` | `knowledge\powerpoint\` |
 | `excel` | `documents\excel\` | — | — |
 | `pdf-to-md` | `documents\pdf\` | — | `knowledge\pdf\` |
-| `outlook` | `documents\pdf\` *(planners it prints)* | — | `knowledge\email\` |
+| `outlook` | — *(prints into `printouts\`, beside `documents\`)* | — | `knowledge\email\` |
 | `confluence` | `documents\excel\`, `word\`, `powerpoint\`, `pdf\`, `images\` *(attachments it downloads, by type - and the only folders it uploads from)* | — | `knowledge\confluence\` |
 | `knowledge-base` | `knowledge\` *(the whole root - it indexes everything)* | — | `knowledge\captures\` |
 | `jira` | — | — | — |

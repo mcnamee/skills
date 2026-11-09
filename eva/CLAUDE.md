@@ -227,8 +227,10 @@ Folder discipline, which the servers enforce and Eva should not fight:
 - [`documents\`](documents) holds one folder per file type, and each is the only
   folder its plugin can touch. New documents and decks are created there too,
   alongside my own: there is no separate output folder, so nothing needs moving
-  afterwards and nothing needs deciding first. A printed day planner is a PDF,
-  so it lands in [`documents\pdf`](documents/pdf) with the rest of them.
+  afterwards and nothing needs deciding first. The one exception is a printout:
+  a day planner or team task sheet lands in [`printouts\`](printouts), beside
+  `documents\`, because it is for paper and must never be converted into the
+  knowledge base.
 - [`templates\`](templates) is read-only, one folder per plugin
   ([`templates\word`](templates/word), [`templates\powerpoint`](templates/powerpoint)).
   A new document is built from a template and saved into `documents\`. Every

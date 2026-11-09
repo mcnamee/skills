@@ -83,7 +83,7 @@ exactly the ones with a due date - the user has already decided.
 Call `outlook_print_team_tasks` with `tasks` and `sources`. Then tell the user,
 briefly:
 
-- the **path** (`H:\Eva\documents\pdf\Team Tasks - <date>.pdf`);
+- the **path** (`H:\Eva\printouts\Team Tasks - <date>.pdf`);
 - **print double-sided, flip on short edge, at 100%** - columns 1-4 on the
   front, 5-8 on the back (Adobe Reader picks this up from the PDF; other
   viewers need it set by hand) - take the exact wording from the reply;
